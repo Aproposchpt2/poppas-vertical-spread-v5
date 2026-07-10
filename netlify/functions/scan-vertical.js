@@ -233,7 +233,7 @@ async function scanSymbol(symbol, cfg) {
 async function debug(event) {
   const sym = (event.queryStringParameters?.ticker || 'NVDA').toUpperCase();
   try {
-    const opts = await (await yf()).options(sym);
+    const yfLib = await yf(); const methods = Object.keys(yfLib).filter(k=>typeof yfLib[k]==='function'); const opts = await yfLib.options(sym);
     const exps = opts.expirationDates ?? opts.options?.map(o => o.expirationDate) ?? [];
     const quote = await (await yf()).quote(sym);
     let chainSample = null;
@@ -241,7 +241,7 @@ async function debug(event) {
       const chain = await (await yf()).options(sym, { date: exps[0] }).catch(() => null);
       chainSample = chain?.puts?.slice(0, 2) ?? null;
     }
-    return j({ sym, price: quote.regularMarketPrice, expCount: exps.length, exps: exps.slice(0,4), chainSample });
+    return j({ sym, price: quote.regularMarketPrice, availableMethods: methods.slice(0,20), expCount: exps.length, exps: exps.slice(0,4), chainSample });
   } catch(e) {
     return j({ error: e.message, sym }, 500);
   }
