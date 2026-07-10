@@ -116,7 +116,7 @@ td{color:rgba(235,242,255,.88)}
         </label>
       </div>
       <label style="margin-bottom:10px">Watchlist (comma-separated)
-        <textarea id="watchlist" rows="2" style="width:100%;background:#050d1c;border:1px solid var(--line2);border-radius:10px;color:#fff;padding:12px;font-family:var(--body);font-size:.92rem;resize:none">NVDA, MSFT, AAPL, CRWD, AMZN, META, TSLA, AMD</textarea>
+        <textarea id="watchlist" rows="2" style="width:100%;background:#050d1c;border:1px solid var(--line2);border-radius:10px;color:#fff;padding:12px;font-family:var(--body);font-size:.92rem;resize:none">AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, NFLX, CRWD, SPY, QQQ, IWM, GLD, XLF, XLE, XLK, BABA, CRM, ORCL, AVGO, QCOM, MU, TXN, INTC, CSCO, JPM, BAC, GS, MS, WFC, V, MA, PYPL, SQ, AMGN, MRNA, PFE, JNJ, UNH, BA, CAT, GE, HON, DE, UBER, COIN, SHOP, SPOT, SNAP</textarea>
       </label>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <label style="flex-direction:row;align-items:center;gap:8px;font-size:.78rem;cursor:pointer"><input type="checkbox" id="avoidEarnings" checked style="width:auto;accent-color:var(--green)"> Avoid earnings ≤7 days</label>
@@ -202,7 +202,7 @@ function resetDefaults(){
   $('maxBidAsk').value='0.25';
   $('avoidEarnings').checked=true;
   $('reqBias').checked=true;
-  $('watchlist').value='NVDA, MSFT, AAPL, CRWD, AMZN, META, TSLA, AMD';
+  $('watchlist').value='AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, NFLX, CRWD, SPY, QQQ, IWM, GLD, XLF, XLE, XLK, BABA, CRM, ORCL, AVGO, QCOM, MU, TXN, INTC, CSCO, JPM, BAC, GS, MS, WFC, V, MA, PYPL, SQ, AMGN, MRNA, PFE, JNJ, UNH, BA, CAT, GE, HON, DE, UBER, COIN, SHOP, SPOT, SNAP';
 }
 
 function biasHtml(label, score){
