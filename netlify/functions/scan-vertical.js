@@ -221,9 +221,29 @@ async function scanSymbol(symbol, cfg) {
   return bestResult;
 }
 
+// ── Debug Handler ─────────────────────────────────────────────────────────────
+
+export async function debug(event) {
+  const sym = (event.queryStringParameters?.ticker || 'NVDA').toUpperCase();
+  try {
+    const opts = await yahooFinance.options(sym);
+    const exps = opts.expirationDates ?? opts.options?.map(o => o.expirationDate) ?? [];
+    const quote = await yahooFinance.quote(sym);
+    let chainSample = null;
+    if (exps.length) {
+      const chain = await yahooFinance.options(sym, { date: exps[0] }).catch(() => null);
+      chainSample = chain?.puts?.slice(0, 2) ?? null;
+    }
+    return j({ sym, price: quote.regularMarketPrice, expCount: exps.length, exps: exps.slice(0,4), chainSample });
+  } catch(e) {
+    return j({ error: e.message, sym }, 500);
+  }
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export const handler = async (event) => {
+  if (event.httpMethod === 'GET') return debug(event);
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
   if (event.httpMethod !== 'POST') return j({ error: 'POST only' }, 405);
 
