@@ -1,7 +1,7 @@
 // POPPA'S Vertical Credit Spread Scanner — Netlify Function
 // Replaces Render/Python backend. Uses yahoo-finance2 for live option chains.
 
-import yahooFinance from 'yahoo-finance2';
+const yahooFinance = require('yahoo-finance2').default;
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -223,7 +223,7 @@ async function scanSymbol(symbol, cfg) {
 
 // ── Debug Handler ─────────────────────────────────────────────────────────────
 
-export async function debug(event) {
+async function debug(event) {
   const sym = (event.queryStringParameters?.ticker || 'NVDA').toUpperCase();
   try {
     const opts = await yahooFinance.options(sym);
@@ -242,7 +242,7 @@ export async function debug(event) {
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
   if (event.httpMethod === 'GET') return debug(event);
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
   if (event.httpMethod !== 'POST') return j({ error: 'POST only' }, 405);
