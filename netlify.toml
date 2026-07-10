@@ -3,6 +3,12 @@
   functions = "netlify/functions"
   command = "npm install"
 
+[[redirects]]
+  from = "/*"
+  to = "https://poppas-vertical-spread-screener.onrender.com/:splat"
+  status = 302
+  force = true
+
 [build.environment]
   NODE_VERSION = "18"
 
