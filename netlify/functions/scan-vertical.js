@@ -1,0 +1,259 @@
+// POPPA'S Vertical Credit Spread Scanner — Netlify Function
+// Replaces Render/Python backend. Uses yahoo-finance2 for live option chains.
+
+import yahooFinance from 'yahoo-finance2';
+
+const CORS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+const j = (body, status = 200) => ({
+  statusCode: status,
+  headers: CORS,
+  body: JSON.stringify(body),
+});
+
+// ── Math helpers ─────────────────────────────────────────────────────────────
+
+function normCDF(x) {
+  const a = [0.319381530, -0.356563782, 1.781477937, -1.821255978, 1.330274429];
+  const k = 1 / (1 + 0.2316419 * Math.abs(x));
+  const poly = k * (a[0] + k * (a[1] + k * (a[2] + k * (a[3] + k * a[4]))));
+  const pdf = Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+  const val = 1 - pdf * poly;
+  return x >= 0 ? val : 1 - val;
+}
+
+function bsPrice(S, K, T, iv, isPut) {
+  if (T <= 0 || iv <= 0 || S <= 0 || K <= 0) return 0;
+  const r = 0.045;
+  const d1 = (Math.log(S / K) + (r + iv * iv / 2) * T) / (iv * Math.sqrt(T));
+  const d2 = d1 - iv * Math.sqrt(T);
+  return isPut
+    ? Math.max(0, K * Math.exp(-r * T) * normCDF(-d2) - S * normCDF(-d1))
+    : Math.max(0, S * normCDF(d1) - K * Math.exp(-r * T) * normCDF(d2));
+}
+
+function mid(opt) {
+  const b = opt.bid ?? 0, a = opt.ask ?? 0, l = opt.lastPrice ?? 0;
+  if (b > 0 && a > 0 && a >= b) return (b + a) / 2;
+  return l > 0 ? l : 0;
+}
+
+function baPct(opt) {
+  const b = opt.bid ?? 0, a = opt.ask ?? 0, m = mid(opt);
+  if (b > 0 && a >= b && m > 0) return (a - b) / m;
+  return m > 0 ? 0.20 : 1.0;
+}
+
+// ── Directional bias ──────────────────────────────────────────────────────────
+
+function calcBias(closes) {
+  if (!closes || closes.length < 55) return { score: 0, label: 'Neutral' };
+  const price = closes[closes.length - 1];
+  const ema = (arr, span) => {
+    const k = 2 / (span + 1);
+    return arr.reduce((acc, v, i) => {
+      acc.push(i === 0 ? v : v * k + acc[acc.length - 1] * (1 - k));
+      return acc;
+    }, []);
+  };
+  const ma20 = ema(closes, 20); const ma50 = ema(closes, 50);
+  const roc21 = (price / closes[closes.length - 22] - 1);
+  const macd = ema(closes, 12).map((v, i) => v - ema(closes, 26)[i]);
+  const sig = ema(macd, 9);
+  const hist = macd.map((v, i) => v - sig[i]);
+  const macdSlope = (hist[hist.length - 1] - hist[hist.length - 2]) / Math.max(price, 1);
+  let score = ma20[ma20.length - 1] > ma50[ma50.length - 1] ? 0.25 : -0.25;
+  score += Math.max(-0.20, Math.min(0.20, roc21));
+  score += Math.max(-0.10, Math.min(0.10, macdSlope * 10));
+  score = Math.max(-1, Math.min(1, score));
+  const label = score >= 0.5 ? 'Strong Bullish' : score >= 0.1 ? 'Bullish'
+    : score <= -0.5 ? 'Strong Bearish' : score <= -0.1 ? 'Bearish' : 'Neutral';
+  return { score: Math.round(score * 1000) / 1000, label };
+}
+
+// ── IV Rank ───────────────────────────────────────────────────────────────────
+
+function ivRank(chain) {
+  const vals = chain
+    .map(o => o.impliedVolatility ?? 0)
+    .filter(v => v > 0 && v < 3);
+  if (!vals.length) return 0;
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+  return Math.min(1, Math.max(0, (mean - 0.15) / 0.70));
+}
+
+// ── Spread selection ──────────────────────────────────────────────────────────
+
+function selectSpread(chain, price, bullish, cfg) {
+  const opts = chain
+    .map(o => ({ ...o, _mid: mid(o), _ba: baPct(o) }))
+    .filter(o => o._mid > 0 && o._ba <= cfg.maxBidAsk && (o.openInterest ?? 0) >= cfg.minOI);
+
+  let shorts = bullish
+    ? opts.filter(o => o.strike < price * 0.985 && o.strike > price * 0.75).sort((a, b) => b.strike - a.strike)
+    : opts.filter(o => o.strike > price * 1.015 && o.strike < price * 1.25).sort((a, b) => a.strike - b.strike);
+
+  let best = null, bestQuality = -1;
+
+  for (const sp of shorts.slice(0, 15)) {
+    const longOpts = bullish
+      ? opts.filter(o => o.strike < sp.strike).sort((a, b) => b.strike - a.strike)
+      : opts.filter(o => o.strike > sp.strike).sort((a, b) => a.strike - b.strike);
+
+    for (const lp of longOpts.slice(0, 5)) {
+      const width = Math.abs(sp.strike - lp.strike);
+      if (width <= 0) continue;
+      const credit = sp._mid - lp._mid;
+      if (credit <= 0 || credit >= width) continue;
+      const maxRisk = width - credit;
+      const ror = credit / maxRisk;
+      if (ror < cfg.minRor) continue;
+      const q = ror - sp._ba * 0.35 + Math.min((sp.openInterest ?? 0) / 10000, 0.2);
+      if (best === null || q > bestQuality) {
+        bestQuality = q;
+        best = {
+          shortStrike: sp.strike, longStrike: lp.strike,
+          width, credit: +(credit * 100).toFixed(2),
+          maxRisk: +(maxRisk * 100).toFixed(2), ror,
+          openInterest: Math.min(sp.openInterest ?? 0, lp.openInterest ?? 0),
+          bidAskPct: Math.max(sp._ba, lp._ba),
+          iv: ((sp.impliedVolatility ?? 0) + (lp.impliedVolatility ?? 0)) / 2,
+        };
+      }
+    }
+  }
+  return best;
+}
+
+// ── Main scan ─────────────────────────────────────────────────────────────────
+
+async function scanSymbol(symbol, cfg) {
+  const ticker = await yahooFinance.quoteSummary(symbol, {
+    modules: ['price', 'calendarEvents'],
+  }).catch(() => null);
+  if (!ticker) return null;
+
+  const price = ticker.price?.regularMarketPrice ?? 0;
+  if (price <= 0) return null;
+
+  // Earnings check
+  const earningsDate = ticker.calendarEvents?.earnings?.earningsDate?.[0] ?? null;
+  const earningsDays = earningsDate
+    ? Math.round((new Date(earningsDate) - Date.now()) / 86400000)
+    : 999;
+  if (cfg.avoidEarnings && earningsDays <= 7) return null;
+
+  // Historical prices for bias
+  const hist = await yahooFinance.chart(symbol, {
+    period1: new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0],
+    interval: '1d',
+  }).catch(() => null);
+  const closes = hist?.quotes?.map(q => q.close).filter(Boolean) ?? [];
+  const bias = calcBias(closes);
+
+  if (cfg.strategy === 'auto' && Math.abs(bias.score) < 0.08) return null;
+  const bullish = cfg.strategy === 'bull_put' ? true
+    : cfg.strategy === 'bear_call' ? false
+    : bias.score > 0;
+
+  // Option expirations
+  const expirations = await yahooFinance.options(symbol).then(r => r.expirationDates ?? []).catch(() => []);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const validExps = expirations.filter(d => {
+    const dte = Math.round((new Date(d) - today) / 86400000);
+    return dte >= cfg.dteMin && dte <= cfg.dteMax;
+  });
+
+  let bestResult = null, bestScore = -1;
+
+  for (const expDate of validExps.slice(0, 4)) {
+    const dte = Math.round((new Date(expDate) - today) / 86400000);
+    const optData = await yahooFinance.options(symbol, { date: expDate }).catch(() => null);
+    if (!optData) continue;
+
+    const chain = bullish ? optData.puts : optData.calls;
+    if (!chain?.length) continue;
+
+    const ivr = ivRank(chain);
+    if (ivr < cfg.minIvRank) continue;
+
+    const spread = selectSpread(chain, price, bullish, cfg);
+    if (!spread) continue;
+
+    const ror = spread.ror;
+    const score = Math.min(1, Math.max(0,
+      0.42 * Math.min(ror / 0.55, 1)
+      + 0.24 * Math.abs(bias.score)
+      + 0.22 * ivr
+      + 0.12 * Math.min(spread.openInterest / 2500, 1)
+      - Math.max(0, spread.bidAskPct - 0.18) * 0.6
+    ));
+
+    const shortStrike = spread.shortStrike;
+    const credit = spread.credit / 100;
+    const breakeven = bullish ? +(shortStrike - credit).toFixed(2) : +(shortStrike + credit).toFixed(2);
+    const cushion = Math.abs(price - shortStrike) / Math.max(price, 1);
+    const probability = Math.min(0.86, Math.max(0.51, 0.56 + cushion * 1.7));
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestResult = {
+        ticker: symbol, price: +price.toFixed(2),
+        biasScore: bias.score, biasLabel: bias.label,
+        spreadType: bullish ? 'Bull Put Credit' : 'Bear Call Credit',
+        expiration: new Date(expDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        dte, shortStrike: spread.shortStrike, longStrike: spread.longStrike,
+        width: spread.width, credit: spread.credit, maxRisk: spread.maxRisk,
+        maxProfit: spread.credit, returnOnRisk: +ror.toFixed(4),
+        breakeven, ivRank: +ivr.toFixed(4), ivPercentile: Math.min(1, ivr + 0.08),
+        openInterest: spread.openInterest, bidAskPct: +spread.bidAskPct.toFixed(4),
+        earningsDays: earningsDays < 999 ? earningsDays : 999,
+        probabilityEstimate: +probability.toFixed(4), score: +score.toFixed(4),
+        liquidity: spread.bidAskPct <= 0.12 ? 'Excellent' : spread.bidAskPct <= 0.22 ? 'Good' : 'Fair',
+      };
+    }
+  }
+  return bestResult;
+}
+
+// ── Handler ───────────────────────────────────────────────────────────────────
+
+export const handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
+  if (event.httpMethod !== 'POST') return j({ error: 'POST only' }, 405);
+
+  let body;
+  try { body = JSON.parse(event.body || '{}'); } catch { return j({ error: 'Invalid JSON' }, 400); }
+
+  const tickers = (body.tickers || []).map(t => String(t).toUpperCase().trim()).filter(Boolean).slice(0, 25);
+  if (!tickers.length) return j({ error: 'At least one ticker required' }, 400);
+
+  const cfg = {
+    strategy: body.strategy || 'auto',
+    dteMin: Math.max(1, body.dte_min ?? 21),
+    dteMax: Math.min(365, body.dte_max ?? 45),
+    minIvRank: body.min_iv_rank ?? 0.20,
+    minRor: body.min_ror ?? 0.15,
+    minOI: body.min_open_interest ?? 100,
+    maxBidAsk: body.max_bid_ask_pct ?? 0.25,
+    avoidEarnings: body.avoid_earnings !== false,
+  };
+
+  const rows = [];
+  for (const sym of tickers) {
+    try {
+      const result = await scanSymbol(sym, cfg);
+      if (result) rows.push(result);
+    } catch { continue; }
+  }
+
+  rows.sort((a, b) => b.score - a.score);
+  rows.forEach((r, i) => { r.rank = i + 1; });
+
+  return j({ mode: 'live', results: rows });
+};

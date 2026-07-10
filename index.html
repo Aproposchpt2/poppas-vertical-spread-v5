@@ -185,7 +185,7 @@ td{color:rgba(235,242,255,.88)}
 
 <script>
 'use strict';
-const API_URL = 'https://poppas-vertical-spread-screener.onrender.com/api/scan';
+const API_URL = '/.netlify/functions/scan-vertical';
 const $ = id => document.getElementById(id);
 const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const fmt = (n,d=2) => n==null||isNaN(n)?'—':Number(n).toFixed(d);
