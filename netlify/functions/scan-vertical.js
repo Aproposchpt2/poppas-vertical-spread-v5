@@ -1,7 +1,14 @@
 // POPPA'S Vertical Credit Spread Scanner — Netlify Function
 // Replaces Render/Python backend. Uses yahoo-finance2 for live option chains.
 
-const yahooFinance = require('yahoo-finance2').default;
+let _yf = null;
+async function yf() {
+  if (!_yf) {
+    const mod = await import('yahoo-finance2');
+    _yf = mod.default;
+  }
+  return _yf;
+}
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -133,7 +140,7 @@ function selectSpread(chain, price, bullish, cfg) {
 // ── Main scan ─────────────────────────────────────────────────────────────────
 
 async function scanSymbol(symbol, cfg) {
-  const ticker = await yahooFinance.quoteSummary(symbol, {
+  const ticker = await (await yf()).quoteSummary(symbol, {
     modules: ['price', 'calendarEvents'],
   }).catch(() => null);
   if (!ticker) return null;
@@ -149,7 +156,7 @@ async function scanSymbol(symbol, cfg) {
   if (cfg.avoidEarnings && earningsDays <= 7) return null;
 
   // Historical prices for bias
-  const hist = await yahooFinance.chart(symbol, {
+  const hist = await (await yf()).chart(symbol, {
     period1: new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0],
     interval: '1d',
   }).catch(() => null);
@@ -162,7 +169,7 @@ async function scanSymbol(symbol, cfg) {
     : bias.score > 0;
 
   // Option expirations
-  const expirations = await yahooFinance.options(symbol).then(r => r.expirationDates ?? []).catch(() => []);
+  const expirations = await (await yf()).options(symbol).then(r => r.expirationDates ?? []).catch(() => []);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const validExps = expirations.filter(d => {
     const dte = Math.round((new Date(d) - today) / 86400000);
@@ -173,7 +180,7 @@ async function scanSymbol(symbol, cfg) {
 
   for (const expDate of validExps.slice(0, 4)) {
     const dte = Math.round((new Date(expDate) - today) / 86400000);
-    const optData = await yahooFinance.options(symbol, { date: expDate }).catch(() => null);
+    const optData = await (await yf()).options(symbol, { date: expDate }).catch(() => null);
     if (!optData) continue;
 
     const chain = bullish ? optData.puts : optData.calls;
@@ -226,12 +233,12 @@ async function scanSymbol(symbol, cfg) {
 async function debug(event) {
   const sym = (event.queryStringParameters?.ticker || 'NVDA').toUpperCase();
   try {
-    const opts = await yahooFinance.options(sym);
+    const opts = await (await yf()).options(sym);
     const exps = opts.expirationDates ?? opts.options?.map(o => o.expirationDate) ?? [];
-    const quote = await yahooFinance.quote(sym);
+    const quote = await (await yf()).quote(sym);
     let chainSample = null;
     if (exps.length) {
-      const chain = await yahooFinance.options(sym, { date: exps[0] }).catch(() => null);
+      const chain = await (await yf()).options(sym, { date: exps[0] }).catch(() => null);
       chainSample = chain?.puts?.slice(0, 2) ?? null;
     }
     return j({ sym, price: quote.regularMarketPrice, expCount: exps.length, exps: exps.slice(0,4), chainSample });
