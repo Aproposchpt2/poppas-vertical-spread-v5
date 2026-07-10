@@ -234,15 +234,10 @@ async function debug(event) {
   const sym = (event.queryStringParameters?.ticker || 'NVDA').toUpperCase();
   try {
     const yfLib = await yf();
-    const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(yfLib))
-      .concat(Object.keys(yfLib))
-      .filter(k => typeof yfLib[k] === 'function' && !k.startsWith('_'))
-      .slice(0, 30);
+    const methods = Object.keys(yfLib).filter(k => typeof yfLib[k] === 'function');
     const quote = await yfLib.quote(sym).catch(e => ({ error: e.message }));
     return j({ sym, methods, price: quote?.regularMarketPrice ?? null });
-  } catch(e) {
-    return j({ error: e.message, sym }, 500);
-  }
+  } catch(e) { return j({ error: e.message, sym }, 500); }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
