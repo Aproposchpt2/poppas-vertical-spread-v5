@@ -144,7 +144,7 @@ function getConfig() {
 
 async function fetchLiveResults(config) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
+  const timeout = setTimeout(() => controller.abort(), 55000);
   try {
     const response = await fetch("/.netlify/functions/scan-vertical", {
       method: "POST",

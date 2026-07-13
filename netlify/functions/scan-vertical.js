@@ -253,7 +253,7 @@ exports.handler = async (event) => {
   let body;
   try { body = JSON.parse(event.body || '{}'); } catch { return j({ error: 'Invalid JSON' }, 400); }
 
-  const tickers = (body.tickers || []).map(t => String(t).toUpperCase().trim()).filter(Boolean).slice(0, 100);
+  const tickers = (body.tickers || []).map(t => String(t).toUpperCase().trim()).filter(Boolean).slice(0, 25);
   if (!tickers.length) return j({ error: 'At least one ticker required' }, 400);
 
   const cfg = {
@@ -267,7 +267,7 @@ exports.handler = async (event) => {
     avoidEarnings: body.avoid_earnings !== false,
   };
 
-  const CONCURRENCY = 5;
+  const CONCURRENCY = 3;
   const rows = [];
   for (let i = 0; i < tickers.length; i += CONCURRENCY) {
     const batch = tickers.slice(i, i + CONCURRENCY);
