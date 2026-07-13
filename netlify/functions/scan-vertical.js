@@ -50,10 +50,10 @@ function mid(opt) {
   return l > 0 ? l : 0;
 }
 
-function baPct(opt) {
-  const b = opt.bid ?? 0, a = opt.ask ?? 0, m = mid(opt);
-  if (b > 0 && a >= b && m > 0) return (a - b) / m;
-  return m > 0 ? 0.20 : 1.0;
+function baDollar(opt) {
+  const b = opt.bid ?? 0, a = opt.ask ?? 0;
+  if (a >= b && b >= 0) return a - b;
+  return 9.99;
 }
 
 // ── Directional bias ──────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ function ivRank(chain) {
 
 function selectSpread(chain, price, bullish, cfg) {
   const opts = chain
-    .map(o => ({ ...o, _mid: mid(o), _ba: baPct(o) }))
+    .map(o => ({ ...o, _mid: mid(o), _ba: baDollar(o) }))
     .filter(o => o._mid > 0 && o._ba <= cfg.maxBidAsk && (o.openInterest ?? 0) >= cfg.minOI);
 
   let shorts = bullish

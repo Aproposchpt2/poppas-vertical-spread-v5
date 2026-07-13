@@ -23,7 +23,7 @@ const DEFAULTS = {
   ivRank: 20,
   minRor: 15,
   minOi: 100,
-  maxBidAsk: "0.25",
+  maxBidAsk: "0.25",  // dollars
 };
 
 function hashString(value) {
