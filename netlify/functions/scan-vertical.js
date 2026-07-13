@@ -220,6 +220,9 @@ async function scanSymbol(symbol, cfg) {
         breakeven, ivRank: +ivr.toFixed(4), ivPercentile: Math.min(1, ivr + 0.08),
         openInterest: spread.openInterest, bidAskPct: +spread.bidAskPct.toFixed(4),
         earningsDays: earningsDays < 999 ? earningsDays : 999,
+        earningsDate: earningsDate
+          ? new Date(earningsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '—',
         probabilityEstimate: +probability.toFixed(4), score: +score.toFixed(4),
         liquidity: spread.bidAskPct <= 0.12 ? 'Excellent' : spread.bidAskPct <= 0.22 ? 'Good' : 'Fair',
       };
@@ -250,7 +253,7 @@ exports.handler = async (event) => {
   let body;
   try { body = JSON.parse(event.body || '{}'); } catch { return j({ error: 'Invalid JSON' }, 400); }
 
-  const tickers = (body.tickers || []).map(t => String(t).toUpperCase().trim()).filter(Boolean).slice(0, 25);
+  const tickers = (body.tickers || []).map(t => String(t).toUpperCase().trim()).filter(Boolean).slice(0, 100);
   if (!tickers.length) return j({ error: 'At least one ticker required' }, 400);
 
   const cfg = {
@@ -264,12 +267,14 @@ exports.handler = async (event) => {
     avoidEarnings: body.avoid_earnings !== false,
   };
 
+  const CONCURRENCY = 5;
   const rows = [];
-  for (const sym of tickers) {
-    try {
-      const result = await scanSymbol(sym, cfg);
-      if (result) rows.push(result);
-    } catch { continue; }
+  for (let i = 0; i < tickers.length; i += CONCURRENCY) {
+    const batch = tickers.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(sym => scanSymbol(sym, cfg).catch(() => null))
+    );
+    rows.push(...batchResults.filter(Boolean));
   }
 
   rows.sort((a, b) => b.score - a.score);

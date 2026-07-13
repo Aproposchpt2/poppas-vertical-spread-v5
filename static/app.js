@@ -17,7 +17,7 @@ const els = Object.fromEntries([
 ].map(id => [id, document.getElementById(id)]));
 
 const DEFAULTS = {
-  watchlist: "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, NFLX, CRWD, SPY, QQQ, IWM, GLD, XLF, XLE, XLK, BABA, CRM, ORCL, AVGO, QCOM, MU, TXN, INTC, CSCO, JPM, BAC, GS, MS, WFC, V, MA, PYPL, SQ, AMGN, MRNA, PFE, JNJ, UNH, BA, CAT, GE, HON, DE, UBER, COIN, SHOP, SPOT, SNAP",
+  watchlist: "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, NFLX, CRWD, SPY, QQQ, IWM, GLD, XLF, XLE, XLK, BABA, CRM, ORCL, AVGO, QCOM, MU, TXN, INTC, CSCO, JPM, BAC, GS, MS, WFC, V, MA, PYPL, SQ, AMGN, MRNA, PFE, JNJ, UNH, BA, CAT, GE, HON, DE, UBER, COIN, SHOP, SPOT, SNAP, ADBE, SNOW, PLTR, PANW, NET, DDOG, ZS, OKTA, DELL, EBAY, NOW, MELI, SE, PDD, C, AXP, COF, USB, XOM, CVX, COP, CVS, ABT, MDT, ISRG, HD, LOW, TGT, WMT, COST, SBUX, MCD, NKE, DIS, TLT, GDX, EEM, XBI, RIVN, LCID, NIO, BIDU, APP, TTD, RBLX, ROKU, DASH, LYFT, PINS, ABNB",
   strategy: "auto",
   dteRange: "21-45",
   ivRank: 20,
@@ -41,7 +41,7 @@ function seededUnit(seed, salt = 0) {
 }
 
 function parseTickers(raw) {
-  return [...new Set(raw.toUpperCase().split(/[\s,;]+/).map(v => v.trim()).filter(Boolean))].slice(0, 25);
+  return [...new Set(raw.toUpperCase().split(/[\s,;]+/).map(v => v.trim()).filter(Boolean))].slice(0, 100);
 }
 
 function formatMoney(value) {
@@ -144,7 +144,7 @@ function getConfig() {
 
 async function fetchLiveResults(config) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), 60000);
   try {
     const response = await fetch("/.netlify/functions/scan-vertical", {
       method: "POST",
@@ -254,6 +254,7 @@ function renderTable() {
       <td><span class="badge ${badgeClass(row.bias_label)}">${row.bias_label}</span><div class="sub-value">${Number(row.bias_score).toFixed(2)}</div></td>
       <td>${row.spread_type}</td>
       <td>${row.expiration}<div class="sub-value">${row.dte} DTE</div></td>
+      <td>${row.earningsDate || row.earnings_date || (row.earnings_days && row.earnings_days < 999 ? '~' + row.earnings_days + 'd' : '—')}</td>
       <td>${formatStrike(row.short_strike)} / ${formatStrike(row.long_strike)}<div class="sub-value">${formatStrike(row.width)} wide</div></td>
       <td class="positive">${formatMoney(row.credit)}</td>
       <td>${formatMoney(row.max_risk)}</td>
