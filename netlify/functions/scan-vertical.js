@@ -239,10 +239,13 @@ async function scanSymbol(symbol, cfg) {
 async function debug(event) {
   const sym = (event.queryStringParameters?.ticker || 'NVDA').toUpperCase();
   try {
-    const yfLib = await yf();
-    const methods = Object.keys(yfLib).filter(k => typeof yfLib[k] === 'function');
-    const quote = await yfLib.quote(sym).catch(e => ({ error: e.message }));
-    return j({ sym, methods, price: quote?.regularMarketPrice ?? null });
+    const mod = await import('yahoo-finance2');
+    const modKeys = Object.keys(mod || {});
+    const defKeys = Object.keys(mod?.default || {}).slice(0, 15);
+    const defDefKeys = Object.keys(mod?.default?.default || {}).slice(0, 15);
+    const defHasQuote = typeof mod?.default?.quote === 'function';
+    const defDefHasQuote = typeof mod?.default?.default?.quote === 'function';
+    return j({ sym, modKeys, defKeys, defDefKeys, defHasQuote, defDefHasQuote });
   } catch(e) { return j({ error: e.message, sym }, 500); }
 }
 
