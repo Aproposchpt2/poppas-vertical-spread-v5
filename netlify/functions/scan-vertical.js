@@ -5,7 +5,10 @@ let _yf = null;
 async function yf() {
   if (!_yf) {
     const mod = await import('yahoo-finance2');
-    _yf = mod.default;
+    const candidate = mod.default;
+    _yf = typeof candidate?.quote === 'function' ? candidate
+        : typeof candidate?.default?.quote === 'function' ? candidate.default
+        : candidate;
   }
   return _yf;
 }
