@@ -9,8 +9,3 @@
 [functions]
   node_bundler = "esbuild"
 
-[[redirects]]
-  from = "/*"
-  to = "https://poppas-vertical-spread-screener.onrender.com/:splat"
-  status = 302
-  force = true
