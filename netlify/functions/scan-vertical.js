@@ -161,7 +161,7 @@ async function scanSymbol(symbol, cfg) {
   const closes = hist?.quotes?.map(q => q.close).filter(Boolean) ?? [];
   const bias = calcBias(closes);
 
-  if (cfg.strategy === 'auto' && Math.abs(bias.score) < 0.08) return null;
+  if (cfg.strategy === 'auto' && cfg.requireDirectional && Math.abs(bias.score) < 0.08) return null;
   const bullish = cfg.strategy === 'bull_put' ? true
     : cfg.strategy === 'bear_call' ? false
     : bias.score > 0;
@@ -260,11 +260,12 @@ exports.handler = async (event) => {
     strategy: body.strategy || 'auto',
     dteMin: Math.max(1, body.dte_min ?? 21),
     dteMax: Math.min(365, body.dte_max ?? 45),
-    minIvRank: body.min_iv_rank ?? 0.20,
-    minRor: body.min_ror ?? 0.15,
+    minIvRank: body.min_iv_rank ?? 0.05,
+    minRor: body.min_ror ?? 0.05,
     minOI: body.min_open_interest ?? 100,
     maxBidAsk: body.max_bid_ask_pct ?? 1.00,
-    monthlyOnly: body.monthly_chain_only !== false,
+    monthlyOnly: body.monthly_chain_only === true,
+    requireDirectional: body.require_directional === true,
     avoidEarnings: body.avoid_earnings !== false,
   };
 

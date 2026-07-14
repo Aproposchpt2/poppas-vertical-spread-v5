@@ -46,12 +46,12 @@ const els = Object.fromEntries([
 ].map(id => [id, document.getElementById(id)]));
 
 const DEFAULTS = {
-  monthlyChainOnly: true,
+  monthlyChainOnly: false,
   watchlist: "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, NFLX, CRWD, SPY, QQQ, IWM, GLD, XLF, XLE, XLK, BABA, CRM, ORCL, AVGO, QCOM, MU, TXN, INTC, CSCO, JPM, BAC, GS, MS, WFC, V, MA, PYPL, SQ, AMGN, MRNA, PFE, JNJ, UNH, BA, CAT, GE, HON, DE, UBER, COIN, SHOP, SPOT, SNAP, ADBE, SNOW, PLTR, PANW, NET, DDOG, ZS, OKTA, DELL, EBAY, NOW, MELI, SE, PDD, C, AXP, COF, USB, XOM, CVX, COP, CVS, ABT, MDT, ISRG, HD, LOW, TGT, WMT, COST, SBUX, MCD, NKE, DIS, TLT, GDX, EEM, XBI, RIVN, LCID, NIO, BIDU, APP, TTD, RBLX, ROKU, DASH, LYFT, PINS, ABNB",
   strategy: "auto",
   dteRange: "21-45",
-  ivRank: 20,
-  minRor: 8,
+  ivRank: 5,
+  minRor: 5,
   minOi: 100,
   maxBidAsk: "1.00",
 };
@@ -191,6 +191,7 @@ async function fetchLiveResults(config) {
         min_open_interest: config.minOi,
         max_bid_ask_pct: config.maxBidAsk,
         monthly_chain_only: config.monthlyChainOnly,
+        require_directional: config.directionalConfirmation,
         avoid_earnings: config.avoidEarnings,
       }),
     });
@@ -513,6 +514,7 @@ function resetForm() {
   els.avoidEarnings.checked = true;
   els.directionalConfirmation.checked = true;
   els.ivRankOutput.value = `${DEFAULTS.ivRank}%`;
+  els.monthlyChainOnly.checked = DEFAULTS.monthlyChainOnly;
   els.rorOutput.value = `${DEFAULTS.minRor}%`;
 }
 
