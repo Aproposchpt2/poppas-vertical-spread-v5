@@ -227,7 +227,6 @@ async function fetchLiveResults(config) {
         min_open_interest: config.minOi,
         max_bid_ask_pct: config.maxBidAsk,
         monthly_chain_only: config.monthlyChainOnly,
-        require_live_prices: true,
         require_directional: config.directionalConfirmation,
         avoid_earnings: config.avoidEarnings,
       }),
