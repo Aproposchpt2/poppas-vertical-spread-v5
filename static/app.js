@@ -227,6 +227,7 @@ async function fetchLiveResults(config) {
         min_open_interest: config.minOi,
         max_bid_ask_pct: config.maxBidAsk,
         monthly_chain_only: config.monthlyChainOnly,
+        require_live_prices: true,
         require_directional: config.directionalConfirmation,
         avoid_earnings: config.avoidEarnings,
       }),
@@ -338,7 +339,7 @@ function renderTable() {
   els.resultsBody.innerHTML = state.filteredResults.map((row, index) => `
     <tr>
       <td>${index + 1}</td>
-      <td class="symbol-cell"><strong>${row.ticker}</strong><small>${formatSymbolPrice(row.price)}</small></td>
+      <td class="symbol-cell"><strong>${row.ticker}</strong><small>${formatSymbolPrice(row.price)}${row.price_source === "synthetic" ? " · est" : ""}</small></td>
       <td><span class="badge ${badgeClass(row.bias_label)}">${row.bias_label}</span><div class="sub-value">${Number(row.bias_score).toFixed(2)}</div></td>
       <td>${row.spread_type}</td>
       <td>${row.expiration}<div class="sub-value">${row.dte} DTE</div></td>
