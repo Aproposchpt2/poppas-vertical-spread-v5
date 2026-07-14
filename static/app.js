@@ -220,17 +220,22 @@ async function runScanner(event) {
   try {
     results = await fetchLiveResults(config);
     state.mode = "live";
+    state.results = results.sort((a, b) => b.score - a.score).map((row, index) => ({ ...row, rank: index + 1 }));
+    state.filteredResults = [...state.results];
+    els.dataModeLabel.textContent = "Live Data Mode";
+    els.scannerStatus.textContent = "Complete";
+    renderAll(config.watchlist.length);
   } catch (error) {
-    await new Promise(resolve => setTimeout(resolve, 550));
-    results = buildDemoResults(config.watchlist, config);
-    state.mode = "demo";
+    state.results = [];
+    state.filteredResults = [];
+    els.dataModeLabel.textContent = "Scan Error";
+    els.scannerStatus.textContent = "Error";
+    els.emptyState.classList.remove("hidden");
+    els.tableWrap.classList.add("hidden");
+    els.emptyState.querySelector("h3").textContent = "Live scan unavailable";
+    els.emptyState.querySelector("p").textContent = "Could not reach Yahoo Finance data. Check your connection and try again during market hours (9:30 AM – 4:00 PM ET).";
+    els.resultsSummary.textContent = "Scan failed — no results to display.";
   }
-
-  state.results = results.sort((a, b) => b.score - a.score).map((row, index) => ({ ...row, rank: index + 1 }));
-  state.filteredResults = [...state.results];
-  els.dataModeLabel.textContent = state.mode === "live" ? "Live Data Mode" : "Interactive Demo Mode";
-  els.scannerStatus.textContent = "Complete";
-  renderAll(config.watchlist.length);
   setLoading(false);
 }
 
