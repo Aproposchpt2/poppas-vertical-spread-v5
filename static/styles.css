@@ -253,7 +253,8 @@ dialog::backdrop { background: rgba(0,0,0,.62); backdrop-filter: blur(5px); }
 @media (max-width: 780px) {
   .topbar { grid-template-columns: 1fr auto; padding: 14px 18px; }
   .market-status { display: none; }
-  .top-actions .ghost-button { display: none; }
+  .top-actions #journalNavButton { display: inline-flex; align-items: center; }
+  .top-actions #journalNavButton span { margin-left: 6px; }
   .mobile-tabs {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
