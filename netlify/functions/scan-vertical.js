@@ -138,15 +138,22 @@ function selectSpread(chain, price, bullish, cfg) {
 // ── Main scan ─────────────────────────────────────────────────────────────────
 
 async function scanSymbol(symbol, cfg) {
-  // Use quote() — /v7/finance/quote is not blocked; quoteSummary /v10 is blocked on cloud IPs
-  const q = await yahooFinance.quote(symbol).catch(() => null);
-  if (!q) return null;
+  // chart() uses query1.finance.yahoo.com — not blocked on cloud IPs
+  // quote() / quoteSummary() use query2 — blocked. Avoid them entirely.
+  const hist = await yahooFinance.chart(symbol, {
+    period1: new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0],
+    interval: '1d',
+  }).catch(() => null);
+  if (!hist) return null;
 
-  const price = q.regularMarketPrice ?? 0;
+  const closes = hist?.quotes?.map(q => q.close).filter(Boolean) ?? [];
+  // meta.regularMarketPrice is the live price included in chart response
+  const price = hist?.meta?.regularMarketPrice ?? closes[closes.length - 1] ?? 0;
   if (price <= 0) return null;
 
-  // Earnings from quote response timestamps
-  const earningsTs = q.earningsTimestamp ?? q.earningsTimestampStart ?? null;
+  // Earnings date from options metadata (query1 endpoint)
+  const optMeta = await yahooFinance.options(symbol).catch(() => null);
+  const earningsTs = optMeta?.quote?.earningsTimestamp ?? optMeta?.quote?.earningsTimestampStart ?? null;
   const earningsRaw = earningsTs ? new Date(earningsTs * 1000) : null;
   const earningsDays = earningsRaw
     ? Math.round((earningsRaw - Date.now()) / 86400000)
@@ -156,12 +163,6 @@ async function scanSymbol(symbol, cfg) {
     ? String(earningsRaw.getMonth() + 1).padStart(2, "0") + "/" + String(earningsRaw.getDate()).padStart(2, "0")
     : "—";
 
-  // Historical prices for bias
-  const hist = await yahooFinance.chart(symbol, {
-    period1: new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0],
-    interval: '1d',
-  }).catch(() => null);
-  const closes = hist?.quotes?.map(q => q.close).filter(Boolean) ?? [];
   const bias = calcBias(closes);
 
   if (cfg.strategy === 'auto' && cfg.requireDirectional && Math.abs(bias.score) < 0.08) return null;
@@ -169,8 +170,8 @@ async function scanSymbol(symbol, cfg) {
     : cfg.strategy === 'bear_call' ? false
     : bias.score > 0;
 
-  // Option expirations
-  const expirations = await yahooFinance.options(symbol).then(r => r.expirationDates ?? []).catch(() => []);
+  // Option expirations — reuse optMeta already fetched above
+  const expirations = optMeta?.expirationDates ?? [];
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const validExps = expirations.filter(d => {
     const dte = Math.round((new Date(d) - today) / 86400000);
@@ -242,11 +243,11 @@ async function debug(event) {
   const sym = (event.queryStringParameters?.ticker || 'AAPL').toUpperCase();
   const log = [];
   try {
-    // Step 1: price via quote() — v7 endpoint not blocked
-    const q = await yahooFinance.quote(sym).catch(e => { log.push('quote error: ' + e.message); return null; });
-    if (!q) return j({ sym, log, step: 'quote failed' });
-    const price = q.regularMarketPrice ?? 0;
-    log.push('price: ' + price + ', earningsTs: ' + (q.earningsTimestamp ?? 'none'));
+    // Step 1: price via chart() — uses query1, not blocked
+    const hist = await yahooFinance.chart(sym, { period1: new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0], interval: '1d' }).catch(e => { log.push('chart error: ' + e.message); return null; });
+    if (!hist) return j({ sym, log, step: 'chart failed' });
+    const price = hist?.meta?.regularMarketPrice ?? hist?.quotes?.slice(-1)[0]?.close ?? 0;
+    log.push('price from chart: ' + price);
     if (price <= 0) return j({ sym, log, step: 'price <= 0' });
 
     // Step 2: expirations
