@@ -168,6 +168,7 @@ input[type="range"] { width: 100%; accent-color: var(--gold); }
 table { width: 100%; border-collapse: collapse; min-width: 1130px; }
 th, td { text-align: left; padding: 14px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 12px; }
 th { color: var(--muted); text-transform: uppercase; letter-spacing: .09em; font-size: 9px; background: #0a1a2e; position: sticky; top: 0; z-index: 2; cursor: default; }
+body.light th { background: #e9eef5; color: #2f4a67; }
 th[data-sort] { cursor: pointer; user-select: none; }
 th[data-sort]:hover { color: var(--gold); }
 th[data-sort].sort-asc::after { content: ' ▲'; color: var(--gold); }
