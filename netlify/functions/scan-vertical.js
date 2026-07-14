@@ -283,6 +283,7 @@ exports.handler = async (event) => {
     min_open_interest: Number(body.min_open_interest ?? 100),
     max_bid_ask_pct: Number(body.max_bid_ask_pct ?? 1.0),
     monthly_chain_only: body.monthly_chain_only === true,
+    require_live_prices: body.require_live_prices !== false,
     avoid_earnings: body.avoid_earnings !== false,
     require_directional: body.require_directional === true
   };
@@ -306,9 +307,13 @@ exports.handler = async (event) => {
   const quoteSymbols = [...new Set(results.map((row) => row.ticker))];
   const quoteMap = await fetchLiveQuoteMap(quoteSymbols);
   let livePriceCount = 0;
+  let syntheticPriceCount = 0;
   results = results.map((row) => {
     const live = quoteMap.get(row.ticker);
-    if (!live) return row;
+    if (!live) {
+      syntheticPriceCount += 1;
+      return row;
+    }
     livePriceCount += 1;
     return {
       ...row,
@@ -318,13 +323,18 @@ exports.handler = async (event) => {
     };
   });
 
+  if (cfg.require_live_prices) {
+    results = results.filter((row) => row.price_source !== 'synthetic');
+  }
+
   return j({
     mode: livePriceCount > 0 ? 'live' : 'local',
     results,
     quote_prices: {
       requested: quoteSymbols.length,
       live: livePriceCount,
-      synthetic: quoteSymbols.length - livePriceCount
+      synthetic: syntheticPriceCount,
+      require_live_prices: cfg.require_live_prices
     }
   });
 };
