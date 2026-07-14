@@ -510,9 +510,9 @@ function resetForm() {
   els.rorOutput.value = `${DEFAULTS.minRor}%`;
   els.minOi.value = DEFAULTS.minOi;
   els.maxBidAsk.value = DEFAULTS.maxBidAsk;
-  els.monthlyChainOnly.checked = true;
+  els.monthlyChainOnly.checked = DEFAULTS.monthlyChainOnly;
   els.avoidEarnings.checked = true;
-  els.directionalConfirmation.checked = true;
+  els.directionalConfirmation.checked = false;
   els.ivRankOutput.value = `${DEFAULTS.ivRank}%`;
   els.monthlyChainOnly.checked = DEFAULTS.monthlyChainOnly;
   els.rorOutput.value = `${DEFAULTS.minRor}%`;
