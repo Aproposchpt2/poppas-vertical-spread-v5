@@ -1,5 +1,9 @@
-// POPPA'S Vertical Credit Spread Scanner — Netlify Function (ESM)
-import yahooFinance from 'yahoo-finance2';
+// POPPA'S Vertical Credit Spread Scanner — Netlify Function (CJS)
+'use strict';
+const _yfMod = require('yahoo-finance2');
+const yahooFinance = typeof _yfMod?.quoteSummary === 'function' ? _yfMod
+    : typeof _yfMod?.default?.quoteSummary === 'function' ? _yfMod.default
+    : _yfMod;
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -246,7 +250,7 @@ async function debug(event) {
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
   if (event.httpMethod === 'GET') return debug(event);
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
   if (event.httpMethod !== 'POST') return j({ error: 'POST only' }, 405);
