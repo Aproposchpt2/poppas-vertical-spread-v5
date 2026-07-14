@@ -121,6 +121,11 @@
 
             <div class="toggle-stack">
               <label class="toggle-row">
+                <span><strong>Monthly chain only</strong><small>Restrict candidates to standard monthly expirations (3rd Friday).</small></span>
+                <input id="monthlyChainOnly" type="checkbox" checked />
+                <i aria-hidden="true"></i>
+              </label>
+              <label class="toggle-row">
                 <span><strong>Avoid near-term earnings</strong><small>Exclude symbols with earnings inside 7 days.</small></span>
                 <input id="avoidEarnings" type="checkbox" checked />
                 <i aria-hidden="true"></i>
@@ -188,18 +193,18 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Rank</th>
-                    <th>Symbol</th>
-                    <th>Bias</th>
-                    <th>Strategy</th>
-                    <th>Expiration</th>
-                    <th>NED</th>
+                    <th data-sort="rank">Rank</th>
+                    <th data-sort="ticker">Symbol</th>
+                    <th data-sort="bias">Bias</th>
+                    <th data-sort="strategy">Strategy</th>
+                    <th data-sort="dte">Expiration</th>
+                    <th data-sort="ned">NED</th>
                     <th>Strikes</th>
-                    <th>Credit</th>
-                    <th>Max risk</th>
-                    <th>ROR</th>
-                    <th>IV rank</th>
-                    <th>Score</th>
+                    <th data-sort="credit">Credit</th>
+                    <th data-sort="maxrisk">Max risk</th>
+                    <th data-sort="ror">ROR</th>
+                    <th data-sort="ivrank">IV rank</th>
+                    <th data-sort="score">Score</th>
                     <th></th>
                   </tr>
                 </thead>

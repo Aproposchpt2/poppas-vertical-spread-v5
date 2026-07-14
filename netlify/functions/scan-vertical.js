@@ -140,11 +140,14 @@ async function scanSymbol(symbol, cfg) {
   if (price <= 0) return null;
 
   // Earnings check
-  const earningsDate = ticker.calendarEvents?.earnings?.earningsDate?.[0] ?? null;
-  const earningsDays = earningsDate
-    ? Math.round((new Date(earningsDate) - Date.now()) / 86400000)
+  const earningsRaw = ticker.calendarEvents?.earnings?.earningsDate?.[0] ?? null;
+  const earningsDays = earningsRaw
+    ? Math.round((new Date(earningsRaw) - Date.now()) / 86400000)
     : 999;
   if (cfg.avoidEarnings && earningsDays <= 7) return null;
+  const earningsDate = earningsRaw
+    ? String(new Date(earningsRaw).getMonth() + 1).padStart(2, "0") + "/" + String(new Date(earningsRaw).getDate()).padStart(2, "0")
+    : "—";
 
   // Historical prices for bias
   const hist = await yahooFinance.chart(symbol, {
@@ -164,7 +167,13 @@ async function scanSymbol(symbol, cfg) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const validExps = expirations.filter(d => {
     const dte = Math.round((new Date(d) - today) / 86400000);
-    return dte >= cfg.dteMin && dte <= cfg.dteMax;
+    if (dte < cfg.dteMin || dte > cfg.dteMax) return false;
+    if (cfg.monthlyOnly) {
+      const expDate = new Date(d);
+      const day = expDate.getUTCDay(), date = expDate.getUTCDate();
+      return day === 5 && date >= 15 && date <= 21;
+    }
+    return true;
   });
 
   let bestResult = null, bestScore = -1;
@@ -211,9 +220,7 @@ async function scanSymbol(symbol, cfg) {
         breakeven, ivRank: +ivr.toFixed(4), ivPercentile: Math.min(1, ivr + 0.08),
         openInterest: spread.openInterest, bidAskPct: +spread.bidAskPct.toFixed(4),
         earningsDays: earningsDays < 999 ? earningsDays : 999,
-        earningsDate: earningsDate
-          ? new Date(earningsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-          : '—',
+        earningsDate,
         probabilityEstimate: +probability.toFixed(4), score: +score.toFixed(4),
         liquidity: spread.bidAskPct <= 0.12 ? 'Excellent' : spread.bidAskPct <= 0.22 ? 'Good' : 'Fair',
       };
@@ -258,6 +265,7 @@ export const handler = async (event) => {
     minRor: body.min_ror ?? 0.15,
     minOI: body.min_open_interest ?? 100,
     maxBidAsk: body.max_bid_ask_pct ?? 0.25,
+    monthlyOnly: body.monthly_chain_only !== false,
     avoidEarnings: body.avoid_earnings !== false,
   };
 

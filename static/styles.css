@@ -157,11 +157,15 @@ input[type="range"] { width: 100%; accent-color: var(--gold); }
 .empty-state h3 { font-family: Georgia, serif; font-size: 23px; font-weight: 500; margin: 15px 0 8px; }
 .empty-state p { max-width: 610px; color: var(--muted); line-height: 1.6; font-size: 13px; }
 .empty-icon { width: 64px; height: 64px; border: 1px solid var(--line-strong); border-radius: 50%; display: grid; place-items: center; color: var(--gold); font-size: 30px; }
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow: auto; max-height: 66vh; }
 .hidden { display: none !important; }
 table { width: 100%; border-collapse: collapse; min-width: 1130px; }
 th, td { text-align: left; padding: 14px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 12px; }
-th { color: var(--muted); text-transform: uppercase; letter-spacing: .09em; font-size: 9px; background: rgba(4,12,24,.22); }
+th { color: var(--muted); text-transform: uppercase; letter-spacing: .09em; font-size: 9px; background: #0a1a2e; position: sticky; top: 0; z-index: 2; cursor: default; }
+th[data-sort] { cursor: pointer; user-select: none; }
+th[data-sort]:hover { color: var(--gold); }
+th[data-sort].sort-asc::after { content: ' ▲'; color: var(--gold); }
+th[data-sort].sort-desc::after { content: ' ▼'; color: var(--gold); }
 tbody tr { transition: background .18s; }
 tbody tr:hover { background: rgba(212,181,106,.045); }
 .symbol-cell strong { font-family: Georgia, serif; font-size: 17px; display: block; }

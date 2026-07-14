@@ -6,9 +6,38 @@ const state = {
   journal: JSON.parse(localStorage.getItem("poppasVerticalJournal") || "[]"),
 };
 
+let sortCol = "", sortDir = 1;
+
+function formatNED(row) {
+  if (row.earningsDate && row.earningsDate !== "—") return row.earningsDate;
+  if (row.earnings_date && row.earnings_date !== "—") return row.earnings_date;
+  if (row.earnings_days && row.earnings_days < 999) {
+    const d = new Date(Date.now() + row.earnings_days * 86400000);
+    return String(d.getMonth() + 1).padStart(2, "0") + "/" + String(d.getDate()).padStart(2, "0");
+  }
+  return "—";
+}
+
+function getSortVal(row, col) {
+  switch (col) {
+    case "rank":     return row.rank ?? 0;
+    case "ticker":   return row.ticker ?? "";
+    case "bias":     return row.bias_score ?? 0;
+    case "strategy": return row.spread_type ?? "";
+    case "dte":      return row.dte ?? 0;
+    case "ned":      return formatNED(row);
+    case "credit":   return row.credit ?? 0;
+    case "maxrisk":  return row.max_risk ?? 0;
+    case "ror":      return row.return_on_risk ?? 0;
+    case "ivrank":   return row.iv_rank ?? 0;
+    case "score":    return row.score ?? 0;
+    default:         return 0;
+  }
+}
+
 const els = Object.fromEntries([
   "scannerForm", "watchlist", "strategy", "dteRange", "ivRank", "ivRankOutput", "minRor", "rorOutput",
-  "minOi", "maxBidAsk", "avoidEarnings", "directionalConfirmation", "runButton", "resetButton", "scannerStatus",
+  "minOi", "maxBidAsk", "monthlyChainOnly", "avoidEarnings", "directionalConfirmation", "runButton", "resetButton", "scannerStatus",
   "symbolCount", "qualifiedCount", "topScore", "metricScanned", "metricQualified", "metricRor", "metricScore",
   "resultsSummary", "emptyState", "tableWrap", "resultsBody", "resultSearch", "sortResults", "exportButton",
   "biasChart", "scoreChart", "alertThreshold", "alertsList", "dataModeLabel", "detailDrawer", "drawerBackdrop",
@@ -17,6 +46,7 @@ const els = Object.fromEntries([
 ].map(id => [id, document.getElementById(id)]));
 
 const DEFAULTS = {
+  monthlyChainOnly: true,
   watchlist: "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, NFLX, CRWD, SPY, QQQ, IWM, GLD, XLF, XLE, XLK, BABA, CRM, ORCL, AVGO, QCOM, MU, TXN, INTC, CSCO, JPM, BAC, GS, MS, WFC, V, MA, PYPL, SQ, AMGN, MRNA, PFE, JNJ, UNH, BA, CAT, GE, HON, DE, UBER, COIN, SHOP, SPOT, SNAP, ADBE, SNOW, PLTR, PANW, NET, DDOG, ZS, OKTA, DELL, EBAY, NOW, MELI, SE, PDD, C, AXP, COF, USB, XOM, CVX, COP, CVS, ABT, MDT, ISRG, HD, LOW, TGT, WMT, COST, SBUX, MCD, NKE, DIS, TLT, GDX, EEM, XBI, RIVN, LCID, NIO, BIDU, APP, TTD, RBLX, ROKU, DASH, LYFT, PINS, ABNB",
   strategy: "auto",
   dteRange: "21-45",
@@ -137,6 +167,7 @@ function getConfig() {
     minRor: Number(els.minRor.value),
     minOi: Number(els.minOi.value),
     maxBidAsk: Number(els.maxBidAsk.value),
+    monthlyChainOnly: els.monthlyChainOnly.checked,
     avoidEarnings: els.avoidEarnings.checked,
     directionalConfirmation: els.directionalConfirmation.checked,
   };
@@ -159,6 +190,7 @@ async function fetchLiveResults(config) {
         min_ror: config.minRor / 100,
         min_open_interest: config.minOi,
         max_bid_ask_pct: config.maxBidAsk,
+        monthly_chain_only: config.monthlyChainOnly,
         avoid_earnings: config.avoidEarnings,
       }),
     });
@@ -230,12 +262,22 @@ function applySearchAndSort() {
   const query = els.resultSearch.value.trim().toLowerCase();
   const sort = els.sortResults.value;
   let rows = state.results.filter(row => `${row.ticker} ${row.spread_type} ${row.bias_label}`.toLowerCase().includes(query));
-  rows.sort((a, b) => {
-    if (sort === "ror-desc") return b.return_on_risk - a.return_on_risk;
-    if (sort === "credit-desc") return b.credit - a.credit;
-    if (sort === "dte-asc") return a.dte - b.dte;
-    return b.score - a.score;
-  });
+
+  if (sortCol) {
+    rows.sort((a, b) => {
+      const av = getSortVal(a, sortCol), bv = getSortVal(b, sortCol);
+      if (typeof av === "string") return sortDir * av.localeCompare(bv);
+      return sortDir * ((av ?? -Infinity) - (bv ?? -Infinity));
+    });
+  } else {
+    rows.sort((a, b) => {
+      if (sort === "ror-desc") return b.return_on_risk - a.return_on_risk;
+      if (sort === "credit-desc") return b.credit - a.credit;
+      if (sort === "dte-asc") return a.dte - b.dte;
+      return b.score - a.score;
+    });
+  }
+
   state.filteredResults = rows;
   renderTable();
 }
@@ -254,7 +296,7 @@ function renderTable() {
       <td><span class="badge ${badgeClass(row.bias_label)}">${row.bias_label}</span><div class="sub-value">${Number(row.bias_score).toFixed(2)}</div></td>
       <td>${row.spread_type}</td>
       <td>${row.expiration}<div class="sub-value">${row.dte} DTE</div></td>
-      <td>${row.earningsDate || row.earnings_date || (row.earnings_days && row.earnings_days < 999 ? '~' + row.earnings_days + 'd' : '—')}</td>
+      <td>${formatNED(row)}</td>
       <td>${formatStrike(row.short_strike)} / ${formatStrike(row.long_strike)}<div class="sub-value">${formatStrike(row.width)} wide</div></td>
       <td class="positive">${formatMoney(row.credit)}</td>
       <td>${formatMoney(row.max_risk)}</td>
@@ -461,6 +503,7 @@ function resetForm() {
   els.minRor.value = DEFAULTS.minRor;
   els.minOi.value = DEFAULTS.minOi;
   els.maxBidAsk.value = DEFAULTS.maxBidAsk;
+  els.monthlyChainOnly.checked = true;
   els.avoidEarnings.checked = true;
   els.directionalConfirmation.checked = true;
   els.ivRankOutput.value = `${DEFAULTS.ivRank}%`;
@@ -482,6 +525,21 @@ els.journalNavButton.addEventListener("click", openJournal);
 els.closeJournal.addEventListener("click", () => els.journalDialog.close());
 els.themeButton.addEventListener("click", () => document.body.classList.toggle("light"));
 document.addEventListener("keydown", event => { if (event.key === "Escape") closeDetail(); });
+
+document.querySelectorAll("th[data-sort]").forEach(th => {
+  th.addEventListener("click", () => {
+    const col = th.dataset.sort;
+    if (sortCol === col) {
+      sortDir *= -1;
+    } else {
+      sortCol = col;
+      sortDir = col === "ticker" || col === "strategy" || col === "ned" ? 1 : -1;
+    }
+    document.querySelectorAll("th[data-sort]").forEach(t => t.classList.remove("sort-asc", "sort-desc"));
+    th.classList.add(sortDir === 1 ? "sort-asc" : "sort-desc");
+    applySearchAndSort();
+  });
+});
 
 renderJournalCount();
 els.symbolCount.textContent = parseTickers(els.watchlist.value).length;
