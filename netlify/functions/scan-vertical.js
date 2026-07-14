@@ -9,6 +9,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 const ALPHA_BASE_URL = 'https://www.alphavantage.co/query';
+const YAHOO_QUOTE_URL = 'https://query1.finance.yahoo.com/v7/finance/quote';
 const API_KEY = String(process.env.ALPHA_VANTAGE_API_KEY || '').trim();
 
 const j = (body, status = 200) => ({
@@ -162,21 +163,61 @@ async function fetchGlobalQuote(symbol) {
 
 async function fetchLiveQuoteMap(symbols) {
   const map = new Map();
-  if (!API_KEY || !symbols.length) return map;
+  if (!symbols.length) return map;
 
-  const pulls = await Promise.all(symbols.map(async (symbol) => {
+  const pulls = API_KEY ? await Promise.all(symbols.map(async (symbol) => {
     try {
       const quote = await fetchGlobalQuote(symbol);
-      if (Number.isFinite(quote.price) && quote.price > 0) return [symbol, quote];
+      if (Number.isFinite(quote.price) && quote.price > 0) {
+        return [symbol, { ...quote, source: 'alpha-vantage' }];
+      }
     } catch (_) {
       return null;
     }
     return null;
-  }));
+  })) : [];
 
   pulls.forEach((entry) => {
     if (entry) map.set(entry[0], entry[1]);
   });
+
+  const missing = symbols.filter((symbol) => !map.has(symbol));
+  if (missing.length) {
+    const yahooQuotes = await fetchYahooQuoteMap(missing);
+    yahooQuotes.forEach((quote, symbol) => {
+      map.set(symbol, quote);
+    });
+  }
+
+  return map;
+}
+
+async function fetchYahooQuoteMap(symbols) {
+  const map = new Map();
+  if (!symbols.length) return map;
+
+  try {
+    const url = new URL(YAHOO_QUOTE_URL);
+    url.searchParams.set('symbols', symbols.join(','));
+    const response = await fetch(url);
+    if (!response.ok) return map;
+
+    const payload = await response.json();
+    const rows = (((payload || {}).quoteResponse || {}).result) || [];
+    rows.forEach((row) => {
+      const symbol = String(row.symbol || '').toUpperCase();
+      const price = Number(row.regularMarketPrice || 0);
+      if (!symbol || !Number.isFinite(price) || price <= 0) return;
+      map.set(symbol, {
+        symbol,
+        price,
+        latestTradingDay: row.regularMarketTime ? new Date(Number(row.regularMarketTime) * 1000).toISOString().slice(0, 10) : null,
+        source: 'yahoo'
+      });
+    });
+  } catch (_) {
+    return map;
+  }
   return map;
 }
 
@@ -233,7 +274,7 @@ exports.handler = async (event) => {
     return {
       ...row,
       price: Number(live.price.toFixed(2)),
-      price_source: 'alpha-vantage',
+      price_source: live.source || 'alpha-vantage',
       price_timestamp: live.latestTradingDay || null
     };
   });
