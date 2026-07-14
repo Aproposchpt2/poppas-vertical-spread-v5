@@ -235,6 +235,20 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200); res.end(JSON.stringify({ status: 'ok' })); return;
   }
 
+  if (req.method === 'GET' && req.url.startsWith('/debug')) {
+    const sym = req.url.split('?')[1]?.split('=')[1] || 'AAPL';
+    const log = [];
+    try {
+      const q = await yf.quoteSummary(sym, { modules: ['price'] }).catch(e => { log.push('quoteSummary error: ' + e.message.slice(0, 120)); return null; });
+      log.push('quoteSummary price: ' + (q?.price?.regularMarketPrice ?? 'null'));
+      const c = await yf.chart(sym, { period1: new Date(Date.now() - 2*86400000).toISOString().split('T')[0], interval: '1d' }).catch(e => { log.push('chart error: ' + e.message.slice(0, 120)); return null; });
+      log.push('chart price: ' + (c?.meta?.regularMarketPrice ?? 'null'));
+      const o = await yf.options(sym).catch(e => { log.push('options error: ' + e.message.slice(0, 120)); return null; });
+      log.push('options expirations: ' + (o?.expirationDates?.length ?? 'null'));
+    } catch(e) { log.push('fatal: ' + e.message); }
+    res.writeHead(200); res.end(JSON.stringify({ sym, log })); return;
+  }
+
   if (req.method !== 'POST' || req.url !== '/api/scan/spread') {
     res.writeHead(404); res.end(JSON.stringify({ error: 'Not found' })); return;
   }
