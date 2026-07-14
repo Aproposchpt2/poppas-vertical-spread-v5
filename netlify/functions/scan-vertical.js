@@ -161,11 +161,50 @@ async function fetchGlobalQuote(symbol) {
   };
 }
 
+async function fetchBatchQuotes(symbols) {
+  const map = new Map();
+  if (!API_KEY || !symbols.length) return map;
+
+  try {
+    const url = new URL(ALPHA_BASE_URL);
+    url.searchParams.set('function', 'BATCH_STOCK_QUOTES');
+    url.searchParams.set('symbols', symbols.join(','));
+    url.searchParams.set('apikey', API_KEY);
+    const response = await fetch(url);
+    if (!response.ok) return map;
+
+    const payload = await response.json();
+    if (payload.Note || payload.Information || payload['Error Message']) return map;
+    const quotes = payload['Stock Quotes'];
+    if (!Array.isArray(quotes)) return map;
+    quotes.forEach((row) => {
+      const symbol = String(row['1. symbol'] || '').toUpperCase();
+      const price = Number(row['2. price'] || 0);
+      if (!symbol || !Number.isFinite(price) || price <= 0) return;
+      map.set(symbol, {
+        symbol,
+        price,
+        latestTradingDay: null,
+        source: 'alpha-vantage'
+      });
+    });
+  } catch (_) {
+    return map;
+  }
+  return map;
+}
+
 async function fetchLiveQuoteMap(symbols) {
   const map = new Map();
   if (!symbols.length) return map;
 
-  const pulls = API_KEY ? await Promise.all(symbols.map(async (symbol) => {
+  if (API_KEY) {
+    const batchQuotes = await fetchBatchQuotes(symbols);
+    batchQuotes.forEach((quote, symbol) => map.set(symbol, quote));
+  }
+
+  const alphaMissing = symbols.filter((symbol) => !map.has(symbol));
+  const pulls = API_KEY ? await Promise.all(alphaMissing.map(async (symbol) => {
     try {
       const quote = await fetchGlobalQuote(symbol);
       if (Number.isFinite(quote.price) && quote.price > 0) {
