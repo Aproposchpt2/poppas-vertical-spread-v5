@@ -120,28 +120,30 @@ function selectSpread(chain, price, bullish, cfg) {
 // ── Main scan ─────────────────────────────────────────────────────────────────
 
 async function scanSymbol(symbol, cfg) {
-  const ticker = await yf.quoteSummary(symbol, {
-    modules: ['price', 'calendarEvents'],
-  }).catch(() => null);
-  if (!ticker) return null;
-
-  const price = ticker.price?.regularMarketPrice ?? 0;
-  if (price <= 0) return null;
-
-  const earningsRaw = ticker.calendarEvents?.earnings?.earningsDate?.[0] ?? null;
-  const earningsDays = earningsRaw
-    ? Math.round((new Date(earningsRaw) - Date.now()) / 86400000)
-    : 999;
-  if (cfg.avoidEarnings && earningsDays >= 0 && earningsDays <= 7) return null;
-  const earningsDate = earningsRaw
-    ? String(new Date(earningsRaw).getMonth() + 1).padStart(2, '0') + '/' + String(new Date(earningsRaw).getDate()).padStart(2, '0')
-    : '—';
-
+  // Use chart() + options() only — both use query1.finance.yahoo.com (not blocked)
+  // quoteSummary/quote use query2 which is blocked on cloud IPs
   const hist = await yf.chart(symbol, {
     period1: new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0],
     interval: '1d',
   }).catch(() => null);
+  if (!hist) return null;
+
   const closes = hist?.quotes?.map(q => q.close).filter(Boolean) ?? [];
+  const price = hist?.meta?.regularMarketPrice ?? closes[closes.length - 1] ?? 0;
+  if (price <= 0) return null;
+
+  // Earnings + expirations from options() — also query1
+  const optMeta = await yf.options(symbol).catch(() => null);
+  const earningsTs = optMeta?.quote?.earningsTimestamp ?? null;
+  const earningsRaw = earningsTs ? new Date(earningsTs * 1000) : null;
+  const earningsDays = earningsRaw
+    ? Math.round((earningsRaw - Date.now()) / 86400000)
+    : 999;
+  if (cfg.avoidEarnings && earningsDays >= 0 && earningsDays <= 7) return null;
+  const earningsDate = earningsRaw
+    ? String(earningsRaw.getMonth() + 1).padStart(2, '0') + '/' + String(earningsRaw.getDate()).padStart(2, '0')
+    : '—';
+
   const bias = calcBias(closes);
 
   if (cfg.requireDirectional && Math.abs(bias.score) < 0.08) return null;
@@ -149,7 +151,7 @@ async function scanSymbol(symbol, cfg) {
     : cfg.strategy === 'bear_call' ? false
     : bias.score > 0;
 
-  const expirations = await yf.options(symbol).then(r => r.expirationDates ?? []).catch(() => []);
+  const expirations = optMeta?.expirationDates ?? [];
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const validExps = expirations.filter(d => {
     const dte = Math.round((new Date(d) - today) / 86400000);
@@ -234,9 +236,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     const log = [];
     try {
-      const q = await yf.quoteSummary('AAPL', { modules: ['price'] }).catch(e => { log.push('quoteSummary err: ' + e.message.slice(0,100)); return null; });
-      log.push('price: ' + (q?.price?.regularMarketPrice ?? 'null'));
-    } catch(e) { log.push('fatal: ' + e.message); }
+      // chart() uses query1 (not blocked); quoteSummary uses query2 (blocked)
+      const c = await yf.chart('AAPL', { period1: new Date(Date.now()-2*86400000).toISOString().split('T')[0], interval:'1d' }).catch(e => { log.push('chart err: '+e.message.slice(0,100)); return null; });
+      log.push('chart price: ' + (c?.meta?.regularMarketPrice ?? 'null'));
+      const o = await yf.options('AAPL').catch(e => { log.push('options err: '+e.message.slice(0,100)); return null; });
+      log.push('options expirations: ' + (o?.expirationDates?.length ?? 'null'));
+    } catch(e) { log.push('fatal: '+e.message); }
     res.writeHead(200); res.end(JSON.stringify({ status: 'ok', yf: log })); return;
   }
 
