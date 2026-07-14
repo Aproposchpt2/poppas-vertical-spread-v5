@@ -76,6 +76,19 @@
               <small>Enter ticker symbols separated by commas or spaces.</small>
             </label>
 
+            <label class="field field-wide">
+              <span>Scan profile</span>
+              <div class="preset-row">
+                <select id="presetProfile">
+                  <option value="balanced" selected>Balanced (Recommended)</option>
+                  <option value="conservative">Conservative</option>
+                  <option value="aggressive">Aggressive</option>
+                </select>
+                <button class="ghost-button" id="applyPresetButton" type="button">Apply Profile</button>
+              </div>
+              <small>Profiles tune filters so customers can focus on higher-quality setups faster.</small>
+            </label>
+
             <div class="form-grid">
               <label class="field">
                 <span>Strategy</span>
@@ -98,24 +111,24 @@
 
               <label class="field">
                 <span>Minimum IV rank</span>
-                <output id="ivRankOutput" for="ivRank">5%</output>
-                <input id="ivRank" type="range" min="0" max="100" value="5" step="5" />
+                <output id="ivRankOutput" for="ivRank">20%</output>
+                <input id="ivRank" type="range" min="0" max="100" value="20" step="5" />
               </label>
 
               <label class="field">
                 <span>Minimum return on risk</span>
-                <output id="rorOutput" for="minRor">5%</output>
-                <input id="minRor" type="range" min="5" max="100" value="5" step="1" />
+                <output id="rorOutput" for="minRor">15%</output>
+                <input id="minRor" type="range" min="5" max="100" value="15" step="1" />
               </label>
 
               <label class="field">
                 <span>Minimum open interest</span>
-                <input id="minOi" type="number" min="0" step="50" value="100" />
+                <input id="minOi" type="number" min="0" step="50" value="500" />
               </label>
 
               <label class="field">
                 <span>Maximum bid/ask spread ($)</span>
-                <input id="maxBidAsk" type="number" min="0.05" max="5.00" step="0.05" value="1.00" />
+                <input id="maxBidAsk" type="number" min="0.05" max="5.00" step="0.05" value="0.20" />
               </label>
             </div>
 
@@ -132,7 +145,7 @@
               </label>
               <label class="toggle-row">
                 <span><strong>Require directional confirmation</strong><small>Match spread direction to the bias engine.</small></span>
-                <input id="directionalConfirmation" type="checkbox" />
+                <input id="directionalConfirmation" type="checkbox" checked />
                 <i aria-hidden="true"></i>
               </label>
             </div>
@@ -203,6 +216,7 @@
                     <th data-sort="credit">Credit</th>
                     <th data-sort="maxrisk">Max risk</th>
                     <th data-sort="ror">ROR</th>
+                    <th data-sort="pop">Est. POP</th>
                     <th data-sort="ivrank">IV rank</th>
                     <th data-sort="score">Score</th>
                     <th></th>

@@ -108,6 +108,8 @@ body.light .card { background: var(--panel); }
 .field-wide { margin-bottom: 18px; }
 .field > span { font-size: 12px; color: var(--ivory); font-weight: 700; }
 .field small, .control-note { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.preset-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.preset-row .ghost-button { white-space: nowrap; }
 textarea, select, input[type="number"], input[type="search"] {
   width: 100%; color: var(--ivory); background: rgba(4, 12, 24, .5); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; outline: none;
 }

@@ -29,6 +29,7 @@ function getSortVal(row, col) {
     case "credit":   return row.credit ?? 0;
     case "maxrisk":  return row.max_risk ?? 0;
     case "ror":      return row.return_on_risk ?? 0;
+    case "pop":      return row.probability_estimate ?? 0;
     case "ivrank":   return row.iv_rank ?? 0;
     case "score":    return row.score ?? 0;
     default:         return 0;
@@ -42,7 +43,7 @@ const els = Object.fromEntries([
   "resultsSummary", "emptyState", "tableWrap", "resultsBody", "resultSearch", "sortResults", "exportButton",
   "biasChart", "scoreChart", "alertThreshold", "alertsList", "dataModeLabel", "detailDrawer", "drawerBackdrop",
   "closeDrawer", "drawerTitle", "drawerContent", "journalNavButton", "journalCount", "journalDialog", "journalEntries",
-  "closeJournal", "themeButton"
+  "closeJournal", "themeButton", "presetProfile", "applyPresetButton"
 ].map(id => [id, document.getElementById(id)]));
 
 const DEFAULTS = {
@@ -50,10 +51,16 @@ const DEFAULTS = {
   watchlist: "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, NFLX, CRWD, SPY, QQQ, IWM, GLD, XLF, XLE, XLK, BABA, CRM, ORCL, AVGO, QCOM, MU, TXN, INTC, CSCO, JPM, BAC, GS, MS, WFC, V, MA, PYPL, SQ, AMGN, MRNA, PFE, JNJ, UNH, BA, CAT, GE, HON, DE, UBER, COIN, SHOP, SPOT, SNAP, ADBE, SNOW, PLTR, PANW, NET, DDOG, ZS, OKTA, DELL, EBAY, NOW, MELI, SE, PDD, C, AXP, COF, USB, XOM, CVX, COP, CVS, ABT, MDT, ISRG, HD, LOW, TGT, WMT, COST, SBUX, MCD, NKE, DIS, TLT, GDX, EEM, XBI, RIVN, LCID, NIO, BIDU, APP, TTD, RBLX, ROKU, DASH, LYFT, PINS, ABNB",
   strategy: "auto",
   dteRange: "21-45",
-  ivRank: 5,
-  minRor: 5,
-  minOi: 100,
-  maxBidAsk: "1.00",
+  ivRank: 20,
+  minRor: 15,
+  minOi: 500,
+  maxBidAsk: "0.20",
+};
+
+const PRESETS = {
+  conservative: { ivRank: 30, minRor: 20, minOi: 1000, maxBidAsk: 0.15, avoidEarnings: true, directionalConfirmation: true },
+  balanced: { ivRank: 20, minRor: 15, minOi: 500, maxBidAsk: 0.20, avoidEarnings: true, directionalConfirmation: true },
+  aggressive: { ivRank: 10, minRor: 10, minOi: 250, maxBidAsk: 0.30, avoidEarnings: false, directionalConfirmation: false },
 };
 
 function hashString(value) {
@@ -234,7 +241,7 @@ async function runScanner(event) {
     els.emptyState.classList.remove("hidden");
     els.tableWrap.classList.add("hidden");
     els.emptyState.querySelector("h3").textContent = "Live scan unavailable";
-    els.emptyState.querySelector("p").textContent = "Could not reach Yahoo Finance data. Check your connection and try again during market hours (9:30 AM – 4:00 PM ET).";
+    els.emptyState.querySelector("p").textContent = "Could not reach Alpha Vantage data. Check your connection and try again during market hours (9:30 AM – 4:00 PM ET).";
     els.resultsSummary.textContent = "Scan failed — no results to display.";
   }
   setLoading(false);
@@ -250,13 +257,17 @@ function renderAll(scannedCount) {
   const rows = state.results;
   const avgRor = rows.length ? rows.reduce((sum, row) => sum + Number(row.return_on_risk), 0) / rows.length : 0;
   const avgScore = rows.length ? rows.reduce((sum, row) => sum + Number(row.score), 0) / rows.length : 0;
+  const avgPop = rows.length ? rows.reduce((sum, row) => sum + Number(row.probability_estimate || 0), 0) / rows.length : 0;
+  const higherChanceCount = rows.filter(row => Number(row.probability_estimate || 0) >= .70).length;
   els.metricScanned.textContent = scannedCount;
   els.metricQualified.textContent = rows.length;
   els.qualifiedCount.textContent = rows.length;
   els.metricRor.textContent = rows.length ? formatPercent(avgRor) : "—";
   els.metricScore.textContent = rows.length ? Math.round(avgScore * 100) : "—";
   els.topScore.textContent = rows.length ? Math.round(rows[0].score * 100) : "—";
-  els.resultsSummary.textContent = rows.length ? `${rows.length} candidate${rows.length === 1 ? "" : "s"} passed the current filters.` : "No spreads passed the current filters.";
+  els.resultsSummary.textContent = rows.length
+    ? `${rows.length} candidate${rows.length === 1 ? "" : "s"} passed filters · Avg POP ${formatPercent(avgPop)} · ${higherChanceCount} with POP ≥ 70%.`
+    : "No spreads passed the current filters.";
   els.emptyState.classList.toggle("hidden", rows.length > 0);
   els.tableWrap.classList.toggle("hidden", rows.length === 0);
   els.exportButton.disabled = rows.length === 0;
@@ -307,6 +318,7 @@ function renderTable() {
       <td class="positive">${formatMoney(row.credit)}</td>
       <td>${formatMoney(row.max_risk)}</td>
       <td class="positive">${formatPercent(row.return_on_risk)}</td>
+      <td>${formatPercent(row.probability_estimate)}</td>
       <td>${formatPercent(row.iv_rank)}</td>
       <td><span class="score-pill">${Math.round(row.score * 100)}</span></td>
       <td><button class="row-action" data-index="${state.results.indexOf(row)}">Analyze</button></td>
@@ -352,7 +364,7 @@ function renderAlerts() {
   els.alertsList.innerHTML = alerts.map((row, index) => `
     <button class="alert-row" data-index="${state.results.indexOf(row)}" type="button">
       <span class="alert-rank">${index + 1}</span>
-      <span><strong>${row.ticker} · ${row.spread_type}</strong><small>${formatStrike(row.short_strike)} / ${formatStrike(row.long_strike)} · ${formatPercent(row.return_on_risk)} ROR · ${row.dte} DTE</small></span>
+      <span><strong>${row.ticker} · ${row.spread_type}</strong><small>${formatStrike(row.short_strike)} / ${formatStrike(row.long_strike)} · ${formatPercent(row.return_on_risk)} ROR · ${formatPercent(row.probability_estimate)} POP · ${row.dte} DTE</small></span>
       <span class="score-pill">${Math.round(row.score * 100)}</span>
     </button>
   `).join("");
@@ -490,7 +502,7 @@ function openJournal() {
 
 function exportCsv() {
   if (!state.filteredResults.length) return;
-  const headers = ["ticker","bias_label","spread_type","expiration","dte","short_strike","long_strike","credit","max_risk","return_on_risk","iv_rank","open_interest","score"];
+  const headers = ["ticker","bias_label","spread_type","expiration","dte","short_strike","long_strike","credit","max_risk","return_on_risk","probability_estimate","iv_rank","open_interest","score"];
   const rows = state.filteredResults.map(row => headers.map(key => JSON.stringify(row[key] ?? "")).join(","));
   const blob = new Blob([[headers.join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -512,10 +524,24 @@ function resetForm() {
   els.maxBidAsk.value = DEFAULTS.maxBidAsk;
   els.monthlyChainOnly.checked = DEFAULTS.monthlyChainOnly;
   els.avoidEarnings.checked = true;
-  els.directionalConfirmation.checked = false;
+  els.directionalConfirmation.checked = true;
+  els.presetProfile.value = "balanced";
   els.ivRankOutput.value = `${DEFAULTS.ivRank}%`;
   els.monthlyChainOnly.checked = DEFAULTS.monthlyChainOnly;
   els.rorOutput.value = `${DEFAULTS.minRor}%`;
+}
+
+function applyPreset() {
+  const preset = PRESETS[els.presetProfile.value];
+  if (!preset) return;
+  els.ivRank.value = preset.ivRank;
+  els.minRor.value = preset.minRor;
+  els.minOi.value = preset.minOi;
+  els.maxBidAsk.value = preset.maxBidAsk.toFixed(2);
+  els.avoidEarnings.checked = preset.avoidEarnings;
+  els.directionalConfirmation.checked = preset.directionalConfirmation;
+  els.ivRankOutput.value = `${preset.ivRank}%`;
+  els.rorOutput.value = `${preset.minRor}%`;
 }
 
 els.scannerForm.addEventListener("submit", runScanner);
@@ -527,6 +553,7 @@ els.sortResults.addEventListener("change", applySearchAndSort);
 els.alertThreshold.addEventListener("input", renderAlerts);
 els.exportButton.addEventListener("click", exportCsv);
 els.resetButton.addEventListener("click", resetForm);
+els.applyPresetButton.addEventListener("click", applyPreset);
 els.closeDrawer.addEventListener("click", closeDetail);
 els.drawerBackdrop.addEventListener("click", closeDetail);
 els.journalNavButton.addEventListener("click", openJournal);
