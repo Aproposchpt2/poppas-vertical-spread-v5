@@ -232,7 +232,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   if (req.method === 'GET' && req.url === '/health') {
-    res.writeHead(200); res.end(JSON.stringify({ status: 'ok' })); return;
+    const log = [];
+    try {
+      const q = await yf.quoteSummary('AAPL', { modules: ['price'] }).catch(e => { log.push('quoteSummary err: ' + e.message.slice(0,100)); return null; });
+      log.push('price: ' + (q?.price?.regularMarketPrice ?? 'null'));
+    } catch(e) { log.push('fatal: ' + e.message); }
+    res.writeHead(200); res.end(JSON.stringify({ status: 'ok', yf: log })); return;
   }
 
   if (req.method === 'GET' && req.url.startsWith('/debug')) {
