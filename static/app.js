@@ -94,6 +94,15 @@ function formatMoney(value) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 }
 
+function formatSymbolPrice(value) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
 function formatPercent(value, digits = 0) {
   return `${(Number(value) * 100).toFixed(digits)}%`;
 }
@@ -329,7 +338,7 @@ function renderTable() {
   els.resultsBody.innerHTML = state.filteredResults.map((row, index) => `
     <tr>
       <td>${index + 1}</td>
-      <td class="symbol-cell"><strong>${row.ticker}</strong><small>${formatMoney(row.price)}${row.price_source === "synthetic" ? " · est" : ""}</small></td>
+      <td class="symbol-cell"><strong>${row.ticker}</strong><small>${formatSymbolPrice(row.price)}${row.price_source === "synthetic" ? " · est" : ""}</small></td>
       <td><span class="badge ${badgeClass(row.bias_label)}">${row.bias_label}</span><div class="sub-value">${Number(row.bias_score).toFixed(2)}</div></td>
       <td>${row.spread_type}</td>
       <td>${row.expiration}<div class="sub-value">${row.dte} DTE</div></td>

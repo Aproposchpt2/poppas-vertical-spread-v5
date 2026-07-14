@@ -8,6 +8,8 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+const ALPHA_BASE_URL = 'https://www.alphavantage.co/query';
+const API_KEY = String(process.env.ALPHA_VANTAGE_API_KEY || '').trim();
 
 const j = (body, status = 200) => ({
   statusCode: status,
@@ -132,6 +134,52 @@ function createCandidate(ticker, index, cfg) {
   };
 }
 
+async function fetchGlobalQuote(symbol) {
+  const url = new URL(ALPHA_BASE_URL);
+  url.searchParams.set('function', 'GLOBAL_QUOTE');
+  url.searchParams.set('symbol', symbol);
+  url.searchParams.set('apikey', API_KEY);
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error('Alpha Vantage HTTP ' + response.status + ': ' + details.slice(0, 180));
+  }
+
+  const payload = await response.json();
+  if (payload.Note) throw new Error(payload.Note);
+  if (payload.Information) throw new Error(payload.Information);
+  if (payload['Error Message']) throw new Error(payload['Error Message']);
+
+  const quote = payload['Global Quote'] || {};
+  const price = Number(quote['05. price'] || 0);
+  return {
+    symbol: quote['01. symbol'] || symbol,
+    price,
+    latestTradingDay: quote['07. latest trading day'] || null
+  };
+}
+
+async function fetchLiveQuoteMap(symbols) {
+  const map = new Map();
+  if (!API_KEY || !symbols.length) return map;
+
+  const pulls = await Promise.all(symbols.map(async (symbol) => {
+    try {
+      const quote = await fetchGlobalQuote(symbol);
+      if (Number.isFinite(quote.price) && quote.price > 0) return [symbol, quote];
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }));
+
+  pulls.forEach((entry) => {
+    if (entry) map.set(entry[0], entry[1]);
+  });
+  return map;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
 
@@ -174,5 +222,29 @@ exports.handler = async (event) => {
   });
 
   results = results.sort((a, b) => b.score - a.score).map((row, index) => ({ ...row, rank: index + 1 }));
-  return j({ mode: 'local', results });
+
+  const quoteSymbols = [...new Set(results.map((row) => row.ticker))];
+  const quoteMap = await fetchLiveQuoteMap(quoteSymbols);
+  let livePriceCount = 0;
+  results = results.map((row) => {
+    const live = quoteMap.get(row.ticker);
+    if (!live) return row;
+    livePriceCount += 1;
+    return {
+      ...row,
+      price: Number(live.price.toFixed(2)),
+      price_source: 'alpha-vantage',
+      price_timestamp: live.latestTradingDay || null
+    };
+  });
+
+  return j({
+    mode: livePriceCount > 0 ? 'live' : 'local',
+    results,
+    quote_prices: {
+      requested: quoteSymbols.length,
+      live: livePriceCount,
+      synthetic: quoteSymbols.length - livePriceCount
+    }
+  });
 };
