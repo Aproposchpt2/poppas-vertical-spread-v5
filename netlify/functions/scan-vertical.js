@@ -236,11 +236,39 @@ async function scanSymbol(symbol, cfg) {
 // ── Debug Handler ─────────────────────────────────────────────────────────────
 
 async function debug(event) {
-  const sym = (event.queryStringParameters?.ticker || 'NVDA').toUpperCase();
+  const sym = (event.queryStringParameters?.ticker || 'AAPL').toUpperCase();
+  const log = [];
   try {
-    const quote = await yahooFinance.quote(sym).catch(e => ({ error: e.message }));
-    return j({ sym, price: quote?.regularMarketPrice ?? null, error: quote?.error ?? null });
-  } catch(e) { return j({ error: e.message, sym }, 500); }
+    // Step 1: price
+    const ticker = await yahooFinance.quoteSummary(sym, { modules: ['price', 'calendarEvents'] }).catch(e => { log.push('quoteSummary error: ' + e.message); return null; });
+    if (!ticker) return j({ sym, log, step: 'quoteSummary failed' });
+    const price = ticker.price?.regularMarketPrice ?? 0;
+    log.push('price: ' + price);
+    if (price <= 0) return j({ sym, log, step: 'price <= 0' });
+
+    // Step 2: expirations
+    const expirations = await yahooFinance.options(sym).then(r => r.expirationDates ?? []).catch(e => { log.push('options error: ' + e.message); return []; });
+    log.push('expirations: ' + expirations.slice(0, 6).join(', '));
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const validExps = expirations.filter(d => {
+      const dte = Math.round((new Date(d) - today) / 86400000);
+      return dte >= 21 && dte <= 45;
+    });
+    log.push('valid exps (21-45 DTE): ' + validExps.join(', '));
+    if (!validExps.length) return j({ sym, log, step: 'no valid expirations in 21-45 DTE' });
+
+    // Step 3: option chain for first valid exp
+    const expDate = validExps[0];
+    const dte = Math.round((new Date(expDate) - today) / 86400000);
+    const optData = await yahooFinance.options(sym, { date: expDate }).catch(e => { log.push('options chain error: ' + e.message); return null; });
+    if (!optData) return j({ sym, log, step: 'option chain fetch failed' });
+    const puts = optData.puts ?? [];
+    const calls = optData.calls ?? [];
+    log.push('puts: ' + puts.length + ', calls: ' + calls.length);
+    log.push('sample put: ' + JSON.stringify(puts[0] ? { strike: puts[0].strike, bid: puts[0].bid, ask: puts[0].ask, oi: puts[0].openInterest } : null));
+
+    return j({ sym, price, expDate, dte, validExps, log });
+  } catch(e) { return j({ error: e.message, sym, log }, 500); }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
