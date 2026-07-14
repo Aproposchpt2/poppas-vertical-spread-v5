@@ -92,22 +92,25 @@ function ivRank(chain) {
 // ── Spread selection ──────────────────────────────────────────────────────────
 
 function selectSpread(chain, price, bullish, cfg) {
-  const opts = chain
+  // Short legs need OI and bid-ask filters; long (wing) legs just need a tradeable mid
+  const shorts = chain
     .map(o => ({ ...o, _mid: mid(o), _ba: baDollar(o) }))
-    .filter(o => o._mid > 0 && o._ba <= cfg.maxBidAsk && (o.openInterest ?? 0) >= cfg.minOI);
+    .filter(o => o._mid > 0 && o._ba <= cfg.maxBidAsk && (o.openInterest ?? 0) >= cfg.minOI
+      && (bullish ? (o.strike < price * 0.99 && o.strike > price * 0.70) : (o.strike > price * 1.01 && o.strike < price * 1.30)))
+    .sort((a, b) => bullish ? b.strike - a.strike : a.strike - b.strike);
 
-  let shorts = bullish
-    ? opts.filter(o => o.strike < price * 0.985 && o.strike > price * 0.75).sort((a, b) => b.strike - a.strike)
-    : opts.filter(o => o.strike > price * 1.015 && o.strike < price * 1.25).sort((a, b) => a.strike - b.strike);
+  const longPool = chain
+    .map(o => ({ ...o, _mid: mid(o) }))
+    .filter(o => o._mid > 0);
 
   let best = null, bestQuality = -1;
 
   for (const sp of shorts.slice(0, 15)) {
-    const longOpts = bullish
-      ? opts.filter(o => o.strike < sp.strike).sort((a, b) => b.strike - a.strike)
-      : opts.filter(o => o.strike > sp.strike).sort((a, b) => a.strike - b.strike);
+    const longOpts = longPool
+      .filter(o => bullish ? o.strike < sp.strike : o.strike > sp.strike)
+      .sort((a, b) => bullish ? b.strike - a.strike : a.strike - b.strike);
 
-    for (const lp of longOpts.slice(0, 5)) {
+    for (const lp of longOpts.slice(0, 8)) {
       const width = Math.abs(sp.strike - lp.strike);
       if (width <= 0) continue;
       const credit = sp._mid - lp._mid;
