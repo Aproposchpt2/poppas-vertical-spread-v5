@@ -1,9 +1,6 @@
 // POPPA'S Vertical Credit Spread Scanner — Netlify Function (CJS)
+// Data: CBOE free delayed quotes (cdn.cboe.com) — Yahoo Finance blocks cloud IPs
 'use strict';
-const _yfMod = require('yahoo-finance2');
-const yahooFinance = typeof _yfMod?.quoteSummary === 'function' ? _yfMod
-    : typeof _yfMod?.default?.quoteSummary === 'function' ? _yfMod.default
-    : _yfMod;
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -18,261 +15,210 @@ const j = (body, status = 200) => ({
   body: JSON.stringify(body),
 });
 
-// ── Math helpers ─────────────────────────────────────────────────────────────
+// ── CBOE data fetch ───────────────────────────────────────────────────────────
 
-function normCDF(x) {
-  const a = [0.319381530, -0.356563782, 1.781477937, -1.821255978, 1.330274429];
-  const k = 1 / (1 + 0.2316419 * Math.abs(x));
-  const poly = k * (a[0] + k * (a[1] + k * (a[2] + k * (a[3] + k * a[4]))));
-  const pdf = Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
-  const val = 1 - pdf * poly;
-  return x >= 0 ? val : 1 - val;
+const cboeUrl = s => `https://cdn.cboe.com/api/global/delayed_quotes/options/${s}.json`;
+
+async function fetchSym(sym) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(cboeUrl(sym), {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: ctrl.signal,
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data.data || data;
+  } catch (_) { return null; }
+  finally { clearTimeout(t); }
 }
 
-function bsPrice(S, K, T, iv, isPut) {
-  if (T <= 0 || iv <= 0 || S <= 0 || K <= 0) return 0;
-  const r = 0.045;
-  const d1 = (Math.log(S / K) + (r + iv * iv / 2) * T) / (iv * Math.sqrt(T));
-  const d2 = d1 - iv * Math.sqrt(T);
-  return isPut
-    ? Math.max(0, K * Math.exp(-r * T) * normCDF(-d2) - S * normCDF(-d1))
-    : Math.max(0, S * normCDF(d1) - K * Math.exp(-r * T) * normCDF(d2));
+// ── OCC symbol parser ─────────────────────────────────────────────────────────
+
+function parseOcc(s) {
+  const m = s.match(/^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/);
+  return m ? { y: 2000 + +m[2], mo: +m[3], d: +m[4], type: m[5], strike: +m[6] / 1000 } : null;
 }
 
-function mid(opt) {
-  const b = opt.bid ?? 0, a = opt.ask ?? 0, l = opt.lastPrice ?? 0;
+function dteOf(y, mo, d) {
+  const now = new Date(); now.setUTCHours(0, 0, 0, 0);
+  return Math.round((Date.UTC(y, mo - 1, d) - now.getTime()) / 86400000);
+}
+
+function isThirdFriday(y, mo, d) {
+  const x = new Date(Date.UTC(y, mo - 1, d));
+  return x.getUTCDay() === 5 && d >= 15 && d <= 21;
+}
+
+function midPrice(o) {
+  const b = o.bid ?? 0, a = o.ask ?? 0;
   if (b > 0 && a > 0 && a >= b) return (b + a) / 2;
-  return l > 0 ? l : 0;
+  return o.last_sale_price ?? 0;
 }
 
-function baDollar(opt) {
-  const b = opt.bid ?? 0, a = opt.ask ?? 0;
-  if (a >= b && b >= 0) return a - b;
-  return 9.99;
+function baDollar(o) {
+  const b = o.bid ?? 0, a = o.ask ?? 0;
+  return (a >= b && b >= 0) ? a - b : 9.99;
 }
 
-// ── Directional bias ──────────────────────────────────────────────────────────
+// ── Directional bias (price momentum) ────────────────────────────────────────
 
-function calcBias(closes) {
-  if (!closes || closes.length < 55) return { score: 0, label: 'Neutral' };
-  const price = closes[closes.length - 1];
-  const ema = (arr, span) => {
-    const k = 2 / (span + 1);
-    return arr.reduce((acc, v, i) => {
-      acc.push(i === 0 ? v : v * k + acc[acc.length - 1] * (1 - k));
-      return acc;
-    }, []);
-  };
-  const ma20 = ema(closes, 20); const ma50 = ema(closes, 50);
-  const roc21 = (price / closes[closes.length - 22] - 1);
-  const macd = ema(closes, 12).map((v, i) => v - ema(closes, 26)[i]);
-  const sig = ema(macd, 9);
-  const hist = macd.map((v, i) => v - sig[i]);
-  const macdSlope = (hist[hist.length - 1] - hist[hist.length - 2]) / Math.max(price, 1);
-  let score = ma20[ma20.length - 1] > ma50[ma50.length - 1] ? 0.25 : -0.25;
-  score += Math.max(-0.20, Math.min(0.20, roc21));
-  score += Math.max(-0.10, Math.min(0.10, macdSlope * 10));
-  score = Math.max(-1, Math.min(1, score));
-  const label = score >= 0.5 ? 'Strong Bullish' : score >= 0.1 ? 'Bullish'
-    : score <= -0.5 ? 'Strong Bearish' : score <= -0.1 ? 'Bearish' : 'Neutral';
-  return { score: Math.round(score * 1000) / 1000, label };
-}
-
-// ── IV Rank ───────────────────────────────────────────────────────────────────
-
-function ivRank(chain) {
-  const vals = chain
-    .map(o => o.impliedVolatility ?? 0)
-    .filter(v => v > 0 && v < 3);
-  if (!vals.length) return 0;
-  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-  return Math.min(1, Math.max(0, (mean - 0.15) / 0.70));
-}
-
-// ── Spread selection ──────────────────────────────────────────────────────────
-
-function selectSpread(chain, price, bullish, cfg) {
-  // Short legs need OI and bid-ask filters; long (wing) legs just need a tradeable mid
-  const shorts = chain
-    .map(o => ({ ...o, _mid: mid(o), _ba: baDollar(o) }))
-    .filter(o => o._mid > 0 && o._ba <= cfg.maxBidAsk && (o.openInterest ?? 0) >= cfg.minOI
-      && (bullish ? (o.strike < price * 0.99 && o.strike > price * 0.70) : (o.strike > price * 1.01 && o.strike < price * 1.30)))
-    .sort((a, b) => bullish ? b.strike - a.strike : a.strike - b.strike);
-
-  const longPool = chain
-    .map(o => ({ ...o, _mid: mid(o) }))
-    .filter(o => o._mid > 0);
-
-  let best = null, bestQuality = -1;
-
-  for (const sp of shorts.slice(0, 15)) {
-    const longOpts = longPool
-      .filter(o => bullish ? o.strike < sp.strike : o.strike > sp.strike)
-      .sort((a, b) => bullish ? b.strike - a.strike : a.strike - b.strike);
-
-    for (const lp of longOpts.slice(0, 8)) {
-      const width = Math.abs(sp.strike - lp.strike);
-      if (width <= 0) continue;
-      const credit = sp._mid - lp._mid;
-      if (credit <= 0 || credit >= width) continue;
-      const maxRisk = width - credit;
-      const ror = credit / maxRisk;
-      if (ror < cfg.minRor) continue;
-      const q = ror - sp._ba * 0.35 + Math.min((sp.openInterest ?? 0) / 10000, 0.2);
-      if (best === null || q > bestQuality) {
-        bestQuality = q;
-        best = {
-          shortStrike: sp.strike, longStrike: lp.strike,
-          width, credit: +(credit * 100).toFixed(2),
-          maxRisk: +(maxRisk * 100).toFixed(2), ror,
-          openInterest: Math.min(sp.openInterest ?? 0, lp.openInterest ?? 0),
-          bidAskPct: Math.max(sp._ba, lp._ba),
-          iv: ((sp.impliedVolatility ?? 0) + (lp.impliedVolatility ?? 0)) / 2,
-        };
-      }
-    }
-  }
-  return best;
+function simpleBias(price, options) {
+  // Use put/call delta distribution as a proxy for directional lean
+  const calls = options.filter(o => o.type === 'C' && Math.abs(o.delta || 0) < 0.5 && Math.abs(o.delta || 0) > 0.1);
+  const puts = options.filter(o => o.type === 'P' && Math.abs(o.delta || 0) < 0.5 && Math.abs(o.delta || 0) > 0.1);
+  const avgCallOI = calls.length ? calls.reduce((s, o) => s + (o.open_interest || 0), 0) / calls.length : 0;
+  const avgPutOI = puts.length ? puts.reduce((s, o) => s + (o.open_interest || 0), 0) / puts.length : 0;
+  const score = avgCallOI + avgPutOI > 0 ? (avgCallOI - avgPutOI) / (avgCallOI + avgPutOI) : 0;
+  const label = score > 0.1 ? 'Bullish' : score < -0.1 ? 'Bearish' : 'Neutral';
+  return { score: +score.toFixed(3), label };
 }
 
 // ── Main scan ─────────────────────────────────────────────────────────────────
 
 async function scanSymbol(symbol, cfg) {
-  // chart() uses query1.finance.yahoo.com — not blocked on cloud IPs
-  // quote() / quoteSummary() use query2 — blocked. Avoid them entirely.
-  const hist = await yahooFinance.chart(symbol, {
-    period1: new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0],
-    interval: '1d',
-  }).catch(() => null);
-  if (!hist) return null;
+  const data = await fetchSym(symbol);
+  if (!data || !Array.isArray(data.options) || !data.options.length) return null;
 
-  const closes = hist?.quotes?.map(q => q.close).filter(Boolean) ?? [];
-  // meta.regularMarketPrice is the live price included in chart response
-  const price = hist?.meta?.regularMarketPrice ?? closes[closes.length - 1] ?? 0;
+  const price = data.current_price ?? 0;
   if (price <= 0) return null;
 
-  // Earnings date from options metadata (query1 endpoint)
-  const optMeta = await yahooFinance.options(symbol).catch(() => null);
-  const earningsTs = optMeta?.quote?.earningsTimestamp ?? optMeta?.quote?.earningsTimestampStart ?? null;
-  const earningsRaw = earningsTs ? new Date(earningsTs * 1000) : null;
-  const earningsDays = earningsRaw
-    ? Math.round((earningsRaw - Date.now()) / 86400000)
-    : 999;
-  if (cfg.avoidEarnings && earningsDays >= 0 && earningsDays <= 7) return null;
-  const earningsDate = earningsRaw
-    ? String(earningsRaw.getMonth() + 1).padStart(2, "0") + "/" + String(earningsRaw.getDate()).padStart(2, "0")
-    : "—";
+  // Parse and group options by expiration
+  const byExp = {};
+  const allParsed = [];
+  for (const o of data.options) {
+    const p = parseOcc(o.option);
+    if (!p) continue;
+    const dte = dteOf(p.y, p.mo, p.d);
+    if (dte < cfg.dteMin || dte > cfg.dteMax) continue;
+    if (cfg.monthlyOnly && !isThirdFriday(p.y, p.mo, p.d)) continue;
+    const ek = `${p.y}-${String(p.mo).padStart(2,'0')}-${String(p.d).padStart(2,'0')}`;
+    const parsed = { ...o, type: p.type, strike: p.strike, dte, ek, _mid: midPrice(o), _ba: baDollar(o) };
+    if (!byExp[ek]) byExp[ek] = [];
+    byExp[ek].push(parsed);
+    allParsed.push(parsed);
+  }
 
-  const bias = calcBias(closes);
+  if (!Object.keys(byExp).length) return null;
 
-  if (cfg.strategy === 'auto' && cfg.requireDirectional && Math.abs(bias.score) < 0.08) return null;
-  const bullish = cfg.strategy === 'bull_put' ? true
-    : cfg.strategy === 'bear_call' ? false
-    : bias.score > 0;
-
-  // Option expirations — reuse optMeta already fetched above
-  const expirations = optMeta?.expirationDates ?? [];
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const validExps = expirations.filter(d => {
-    const dte = Math.round((new Date(d) - today) / 86400000);
-    if (dte < cfg.dteMin || dte > cfg.dteMax) return false;
-    if (cfg.monthlyOnly) {
-      const expDate = new Date(d);
-      const day = expDate.getUTCDay(), date = expDate.getUTCDate();
-      return day === 5 && date >= 15 && date <= 21;
-    }
-    return true;
-  });
+  const bias = simpleBias(price, allParsed);
+  if (cfg.requireDirectional && Math.abs(bias.score) < 0.05) return null;
 
   let bestResult = null, bestScore = -1;
 
-  for (const expDate of validExps.slice(0, 4)) {
-    const dte = Math.round((new Date(expDate) - today) / 86400000);
-    const optData = await yahooFinance.options(symbol, { date: expDate }).catch(() => null);
-    if (!optData) continue;
+  for (const [ek, opts] of Object.entries(byExp)) {
+    const dte = opts[0].dte;
+    const bullish = cfg.strategy === 'bull_put' ? true
+      : cfg.strategy === 'bear_call' ? false
+      : bias.score >= 0;
 
-    const chain = bullish ? optData.puts : optData.calls;
-    if (!chain?.length) continue;
+    const chain = opts.filter(o => o.type === (bullish ? 'P' : 'C'));
+    if (!chain.length) continue;
 
-    const ivr = ivRank(chain);
-    if (ivr < cfg.minIvRank) continue;
+    // IV rank from chain
+    const ivVals = chain.map(o => o.iv ?? 0).filter(v => v > 0 && v < 3);
+    const avgIV = ivVals.length ? ivVals.reduce((a, b) => a + b, 0) / ivVals.length : 0;
+    const ivRankVal = Math.min(1, Math.max(0, (avgIV - 0.10) / 0.70));
+    if (ivRankVal < cfg.minIvRank) continue;
 
-    const spread = selectSpread(chain, price, bullish, cfg);
-    if (!spread) continue;
+    // Short leg candidates: liquid, OTM
+    const shortCandidates = chain
+      .filter(o => o._mid > 0 && o._ba <= cfg.maxBidAsk && (o.open_interest ?? 0) >= cfg.minOI)
+      .filter(o => bullish
+        ? (o.strike < price * 0.995 && o.strike > price * 0.65)
+        : (o.strike > price * 1.005 && o.strike < price * 1.35))
+      .sort((a, b) => bullish ? b.strike - a.strike : a.strike - b.strike);
 
-    const ror = spread.ror;
-    const score = Math.min(1, Math.max(0,
-      0.42 * Math.min(ror / 0.55, 1)
-      + 0.24 * Math.abs(bias.score)
-      + 0.22 * ivr
-      + 0.12 * Math.min(spread.openInterest / 2500, 1)
-      - Math.max(0, spread.bidAskPct - 0.18) * 0.6
-    ));
+    // Long leg pool: any OTM option with a tradeable mid
+    const longPool = chain.filter(o => o._mid > 0);
 
-    const shortStrike = spread.shortStrike;
-    const credit = spread.credit / 100;
-    const breakeven = bullish ? +(shortStrike - credit).toFixed(2) : +(shortStrike + credit).toFixed(2);
-    const cushion = Math.abs(price - shortStrike) / Math.max(price, 1);
-    const probability = Math.min(0.86, Math.max(0.51, 0.56 + cushion * 1.7));
+    for (const sp of shortCandidates.slice(0, 12)) {
+      const lp = longPool
+        .filter(o => bullish ? o.strike < sp.strike : o.strike > sp.strike)
+        .sort((a, b) => bullish ? b.strike - a.strike : a.strike - b.strike)[0];
+      if (!lp || lp._mid <= 0) continue;
 
-    if (score > bestScore) {
-      bestScore = score;
-      bestResult = {
-        ticker: symbol, price: +price.toFixed(2),
-        biasScore: bias.score, biasLabel: bias.label,
-        spreadType: bullish ? 'Bull Put Credit' : 'Bear Call Credit',
-        expiration: new Date(expDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        dte, shortStrike: spread.shortStrike, longStrike: spread.longStrike,
-        width: spread.width, credit: spread.credit, maxRisk: spread.maxRisk,
-        maxProfit: spread.credit, returnOnRisk: +ror.toFixed(4),
-        breakeven, ivRank: +ivr.toFixed(4), ivPercentile: Math.min(1, ivr + 0.08),
-        openInterest: spread.openInterest, bidAskPct: +spread.bidAskPct.toFixed(4),
-        earningsDays: earningsDays < 999 ? earningsDays : 999,
-        earningsDate,
-        probabilityEstimate: +probability.toFixed(4), score: +score.toFixed(4),
-        liquidity: spread.bidAskPct <= 0.12 ? 'Excellent' : spread.bidAskPct <= 0.22 ? 'Good' : 'Fair',
-      };
+      const width = +Math.abs(sp.strike - lp.strike).toFixed(2);
+      if (width <= 0) continue;
+
+      const credit = +(sp._mid - lp._mid).toFixed(4);
+      if (credit <= 0 || credit >= width) continue;
+
+      const maxRisk = +(width - credit).toFixed(4);
+      if (maxRisk <= 0) continue;
+
+      const ror = credit / maxRisk;
+      if (ror < cfg.minRor) continue;
+
+      const score = Math.min(1,
+        0.45 * Math.min(ror / 0.40, 1) +
+        0.30 * Math.min(ivRankVal, 1) +
+        0.15 * Math.min((sp.open_interest ?? 0) / 5000, 1) +
+        0.10 * Math.min(Math.abs(bias.score), 1)
+      );
+
+      if (score > bestScore) {
+        bestScore = score;
+        const [ey, em, ed] = ek.split('-').map(Number);
+        const expDate = new Date(Date.UTC(ey, em - 1, ed));
+        bestResult = {
+          ticker: symbol,
+          price: +price.toFixed(2),
+          biasScore: bias.score,
+          biasLabel: bias.label,
+          spreadType: bullish ? 'Bull Put Credit' : 'Bear Call Credit',
+          expiration: expDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }),
+          dte,
+          shortStrike: sp.strike,
+          longStrike: lp.strike,
+          short_strike: sp.strike,
+          long_strike: lp.strike,
+          width,
+          credit: +(credit * 100).toFixed(2),
+          maxRisk: +(maxRisk * 100).toFixed(2),
+          max_risk: +(maxRisk * 100).toFixed(2),
+          maxProfit: +(credit * 100).toFixed(2),
+          returnOnRisk: +ror.toFixed(4),
+          return_on_risk: +ror.toFixed(4),
+          breakeven: bullish
+            ? +(sp.strike - credit).toFixed(2)
+            : +(sp.strike + credit).toFixed(2),
+          iv_rank: +ivRankVal.toFixed(4),
+          ivRank: +ivRankVal.toFixed(4),
+          ivPercentile: +Math.min(1, ivRankVal + 0.05).toFixed(4),
+          openInterest: sp.open_interest ?? 0,
+          open_interest: sp.open_interest ?? 0,
+          bidAskPct: +sp._ba.toFixed(4),
+          bid_ask_pct: +sp._ba.toFixed(4),
+          earningsDays: 999,
+          earnings_days: 999,
+          earningsDate: '—',
+          earnings_date: '—',
+          probabilityEstimate: Math.min(0.86, Math.max(0.51, 0.56 + (Math.abs(price - sp.strike) / price) * 1.5)),
+          probability_estimate: Math.min(0.86, Math.max(0.51, 0.56 + (Math.abs(price - sp.strike) / price) * 1.5)),
+          score: +score.toFixed(4),
+          sector: '—',
+          liquidity: sp._ba <= 0.30 ? 'Excellent' : sp._ba <= 0.75 ? 'Good' : 'Fair',
+          dataSource: 'CBOE Delayed Quotes',
+        };
+      }
     }
   }
+
   return bestResult;
 }
 
-// ── Debug Handler ─────────────────────────────────────────────────────────────
+// ── Debug ─────────────────────────────────────────────────────────────────────
 
 async function debug(event) {
   const sym = (event.queryStringParameters?.ticker || 'AAPL').toUpperCase();
-  const log = [];
-  try {
-    // Step 1: price via chart() — uses query1, not blocked
-    const hist = await yahooFinance.chart(sym, { period1: new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0], interval: '1d' }).catch(e => { log.push('chart error: ' + e.message); return null; });
-    if (!hist) return j({ sym, log, step: 'chart failed' });
-    const price = hist?.meta?.regularMarketPrice ?? hist?.quotes?.slice(-1)[0]?.close ?? 0;
-    log.push('price from chart: ' + price);
-    if (price <= 0) return j({ sym, log, step: 'price <= 0' });
-
-    // Step 2: expirations
-    const expirations = await yahooFinance.options(sym).then(r => r.expirationDates ?? []).catch(e => { log.push('options error: ' + e.message); return []; });
-    log.push('expirations: ' + expirations.slice(0, 6).join(', '));
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const validExps = expirations.filter(d => {
-      const dte = Math.round((new Date(d) - today) / 86400000);
-      return dte >= 21 && dte <= 45;
-    });
-    log.push('valid exps (21-45 DTE): ' + validExps.join(', '));
-    if (!validExps.length) return j({ sym, log, step: 'no valid expirations in 21-45 DTE' });
-
-    // Step 3: option chain for first valid exp
-    const expDate = validExps[0];
-    const dte = Math.round((new Date(expDate) - today) / 86400000);
-    const optData = await yahooFinance.options(sym, { date: expDate }).catch(e => { log.push('options chain error: ' + e.message); return null; });
-    if (!optData) return j({ sym, log, step: 'option chain fetch failed' });
-    const puts = optData.puts ?? [];
-    const calls = optData.calls ?? [];
-    log.push('puts: ' + puts.length + ', calls: ' + calls.length);
-    log.push('sample put: ' + JSON.stringify(puts[0] ? { strike: puts[0].strike, bid: puts[0].bid, ask: puts[0].ask, oi: puts[0].openInterest } : null));
-
-    return j({ sym, price, expDate, dte, validExps, log });
-  } catch(e) { return j({ error: e.message, sym, log }, 500); }
+  const data = await fetchSym(sym);
+  if (!data) return j({ sym, error: 'CBOE fetch failed' }, 500);
+  const price = data.current_price;
+  const optCount = data.options?.length ?? 0;
+  const sample = (data.options ?? []).slice(0, 2).map(o => ({ option: o.option, bid: o.bid, ask: o.ask, oi: o.open_interest }));
+  return j({ sym, price, optCount, sample });
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -301,14 +247,12 @@ exports.handler = async (event) => {
     avoidEarnings: body.avoid_earnings !== false,
   };
 
-  const CONCURRENCY = 3;
+  const CONCURRENCY = 5;
   const rows = [];
   for (let i = 0; i < tickers.length; i += CONCURRENCY) {
     const batch = tickers.slice(i, i + CONCURRENCY);
-    const batchResults = await Promise.all(
-      batch.map(sym => scanSymbol(sym, cfg).catch(() => null))
-    );
-    rows.push(...batchResults.filter(Boolean));
+    const results = await Promise.all(batch.map(sym => scanSymbol(sym, cfg).catch(() => null)));
+    rows.push(...results.filter(Boolean));
   }
 
   rows.sort((a, b) => b.score - a.score);
