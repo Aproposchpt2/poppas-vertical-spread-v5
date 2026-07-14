@@ -213,12 +213,39 @@ async function scanSymbol(symbol, cfg) {
 
 async function debug(event) {
   const sym = (event.queryStringParameters?.ticker || 'AAPL').toUpperCase();
-  const data = await fetchSym(sym);
-  if (!data) return j({ sym, error: 'CBOE fetch failed' }, 500);
-  const price = data.current_price;
-  const optCount = data.options?.length ?? 0;
-  const sample = (data.options ?? []).slice(0, 2).map(o => ({ option: o.option, bid: o.bid, ask: o.ask, oi: o.open_interest }));
-  return j({ sym, price, optCount, sample });
+  const log = [];
+  try {
+    // Test: raw crumb fetch from query1 (known to work)
+    const crumbRes = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': '*/*' }
+    });
+    const crumb = await crumbRes.text();
+    const crumbCookies = crumbRes.headers.get('set-cookie') || '';
+    log.push('crumb: ' + crumb);
+    log.push('crumb status: ' + crumbRes.status);
+
+    // Test: raw chart fetch from query1 (not query2)
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=5d&crumb=${encodeURIComponent(crumb)}`;
+    const chartRes = await fetch(chartUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Cookie': crumbCookies,
+      }
+    });
+    const chartText = await chartRes.text();
+    log.push('chart status: ' + chartRes.status);
+    log.push('chart response start: ' + chartText.slice(0, 80));
+
+    let price = null;
+    try {
+      const chartData = JSON.parse(chartText);
+      price = chartData?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
+    } catch(_) {}
+    log.push('price: ' + price);
+
+    return j({ sym, log, price });
+  } catch(e) { return j({ sym, log, error: e.message }, 500); }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
