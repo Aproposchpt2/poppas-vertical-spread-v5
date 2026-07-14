@@ -24,10 +24,12 @@ body.light {
   --panel: rgba(255, 255, 255, 0.96);
   --panel-strong: #ffffff;
   --panel-soft: #edf2f7;
-  --line: rgba(27, 47, 71, 0.12);
-  --line-strong: rgba(168, 128, 43, 0.38);
-  --ivory: #11233a;
-  --muted: #637284;
+  --line: rgba(27, 47, 71, 0.14);
+  --line-strong: rgba(168, 128, 43, 0.42);
+  --ivory: #0a1628;
+  --muted: #1e3a56;
+  --gold: #7a5910;
+  --gold-bright: #8a6612;
   --shadow: 0 24px 60px rgba(21, 43, 68, 0.12);
 }
 
