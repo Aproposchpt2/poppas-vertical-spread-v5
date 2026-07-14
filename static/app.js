@@ -388,7 +388,7 @@ function renderAlerts() {
 }
 
 function createPayoffSvg(row) {
-  const width = 470, height = 240, pad = 38;
+  const width = 560, height = 280, pad = 44;
   const spreadWidth = Number(row.width);
   const minPrice = Math.min(row.short_strike, row.long_strike) - spreadWidth * 2.2;
   const maxPrice = Math.max(row.short_strike, row.long_strike) + spreadWidth * 2.2;
@@ -414,17 +414,50 @@ function createPayoffSvg(row) {
   const zeroY = pad + maxProfit / (maxProfit + maxLoss) * (height - pad * 2);
   const shortX = pad + (row.short_strike - minPrice) / (maxPrice - minPrice) * (width - pad * 2);
   const longX = pad + (row.long_strike - minPrice) / (maxPrice - minPrice) * (width - pad * 2);
+  const centerPrice = (row.short_strike + row.long_strike) / 2;
+  const spotX = pad + (Number(row.price) - minPrice) / (maxPrice - minPrice) * (width - pad * 2);
+  const centerX = pad + (centerPrice - minPrice) / (maxPrice - minPrice) * (width - pad * 2);
+  const xLeft = Math.min(shortX, longX);
+  const xRight = Math.max(shortX, longX);
+  const chartBottom = height - pad;
+  const chartTop = pad;
+  const maxProfitY = pad + (maxProfit - maxProfit) / (maxProfit + maxLoss) * (height - pad * 2);
+  const pointsLine = points.join(" ");
   return `
     <svg class="payoff-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Expiration payoff diagram">
+      <polygon points="${pad},${chartBottom} ${xLeft},${chartBottom} ${xLeft},${maxProfitY} ${xRight},${maxProfitY} ${xRight},${chartBottom} ${width-pad},${chartBottom}" fill="rgba(85,214,169,.12)" />
+      <polygon points="${pad},${chartBottom} ${xLeft},${chartBottom} ${xLeft},${zeroY} ${pad},${zeroY}" fill="rgba(255,123,131,.12)" />
+      <polygon points="${xRight},${zeroY} ${xRight},${chartBottom} ${width-pad},${chartBottom} ${width-pad},${zeroY}" fill="rgba(255,123,131,.12)" />
       <line x1="${pad}" y1="${zeroY}" x2="${width-pad}" y2="${zeroY}" stroke="rgba(154,169,186,.45)" stroke-dasharray="5 5" />
-      <line x1="${shortX}" y1="${pad}" x2="${shortX}" y2="${height-pad}" stroke="rgba(212,181,106,.30)" />
-      <line x1="${longX}" y1="${pad}" x2="${longX}" y2="${height-pad}" stroke="rgba(212,181,106,.18)" />
-      <polyline points="${points.join(" ")}" fill="none" stroke="#d4b56a" stroke-width="3" stroke-linejoin="round" />
-      <text x="${pad}" y="18" fill="#55d6a9" font-size="10">Max profit ${formatMoney(maxProfit)}</text>
-      <text x="${width-pad}" y="${height-8}" fill="#ff7b83" font-size="10" text-anchor="end">Max loss ${formatMoney(maxLoss)}</text>
-      <text x="${shortX}" y="${height-14}" fill="#9aa9ba" font-size="9" text-anchor="middle">Short ${formatStrike(row.short_strike)}</text>
-      <text x="${longX}" y="${height-2}" fill="#9aa9ba" font-size="9" text-anchor="middle">Long ${formatStrike(row.long_strike)}</text>
+      <line x1="${shortX}" y1="${chartTop}" x2="${shortX}" y2="${chartBottom}" stroke="rgba(212,181,106,.32)" stroke-dasharray="3 3" />
+      <line x1="${longX}" y1="${chartTop}" x2="${longX}" y2="${chartBottom}" stroke="rgba(212,181,106,.22)" stroke-dasharray="3 3" />
+      <line x1="${spotX}" y1="${chartTop-8}" x2="${spotX}" y2="${chartBottom}" stroke="rgba(108,168,255,.5)" stroke-dasharray="4 4" />
+      <polyline points="${pointsLine}" fill="none" stroke="#63d4ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />
+      <circle cx="${centerX}" cy="${maxProfitY}" r="4" fill="#55d6a9" />
+      <text x="${pad}" y="${chartTop-12}" fill="#55d6a9" font-size="11">Max profit ${formatMoney(maxProfit)}</text>
+      <text x="${width-pad}" y="${chartBottom+16}" fill="#ff7b83" font-size="11" text-anchor="end">Max loss ${formatMoney(maxLoss)}</text>
+      <text x="${spotX}" y="${chartTop-16}" fill="#6ca8ff" font-size="10" text-anchor="middle">Spot ${formatMoney(Number(row.price))}</text>
+      <text x="${shortX}" y="${chartBottom+14}" fill="#9aa9ba" font-size="10" text-anchor="middle">Short ${formatStrike(row.short_strike)}</text>
+      <text x="${longX}" y="${chartBottom+27}" fill="#9aa9ba" font-size="10" text-anchor="middle">Long ${formatStrike(row.long_strike)}</text>
     </svg>`;
+}
+
+function createSpreadGauges(row) {
+  const pop = Math.round(Number(row.probability_estimate || 0) * 100);
+  const iv = Math.round(Number(row.iv_rank || 0) * 100);
+  const ror = Math.round(Number(row.return_on_risk || 0) * 100);
+  return `
+    <div class="spread-gauges">
+      ${gaugeRow("Estimated POP", pop)}
+      ${gaugeRow("IV Rank", iv)}
+      ${gaugeRow("Return on Risk", ror)}
+    </div>
+  `;
+}
+
+function gaugeRow(label, value) {
+  const clamped = Math.max(0, Math.min(100, Number(value)));
+  return `<div class="spread-gauge-row"><span>${label}</span><div class="spread-gauge-track"><div class="spread-gauge-fill" style="width:${clamped}%"></div></div><strong>${clamped}%</strong></div>`;
 }
 
 function openDetail(index) {
@@ -450,6 +483,7 @@ function openDetail(index) {
       ${detailStat("Liquidity", `${row.liquidity} · ${row.open_interest.toLocaleString()} OI`)}
     </div>
     <div class="payoff-card"><h3>Expiration payoff profile</h3>${createPayoffSvg(row)}</div>
+    <div class="payoff-card"><h3>Setup quality gauges</h3>${createSpreadGauges(row)}</div>
     <div class="analysis-notes"><strong>Research interpretation:</strong> This candidate is ranked from return on risk, directional alignment, IV rank, and liquidity. The estimate does not account for commissions, assignment risk, volatility changes after entry, or intraday execution slippage.</div>
     <div class="drawer-actions">
       <button class="primary-button" id="saveToJournal" type="button">Save to trade journal</button>

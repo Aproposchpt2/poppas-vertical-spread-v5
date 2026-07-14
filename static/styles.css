@@ -222,6 +222,12 @@ footer strong { color: var(--gold-bright); }
 .payoff-card { margin-top: 20px; border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
 .payoff-card h3 { font-family: Georgia, serif; font-weight: 500; }
 .payoff-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.spread-gauges { display: grid; gap: 12px; }
+.spread-gauge-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.spread-gauge-row span { color: var(--muted); font-size: 11px; }
+.spread-gauge-row strong { color: var(--gold-bright); font-size: 12px; min-width: 42px; text-align: right; }
+.spread-gauge-track { height: 10px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.04); overflow: hidden; }
+.spread-gauge-fill { height: 100%; background: linear-gradient(90deg, #3ee391, #63d4ff); border-radius: inherit; }
 .analysis-notes { margin: 20px 0; padding: 16px; border-left: 2px solid var(--gold); background: rgba(212,181,106,.05); color: var(--muted); font-size: 12px; line-height: 1.65; }
 .drawer-actions { display: flex; gap: 10px; }
 .drawer-actions button { flex: 1; }
