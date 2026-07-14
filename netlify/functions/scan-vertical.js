@@ -129,6 +129,7 @@ exports.handler = async (event) => {
     dte_max: Number(body.dte_max ?? 45),
     min_iv_rank: Number(body.min_iv_rank ?? 0.05),
     min_ror: Number(body.min_ror ?? 0.05),
+    min_pop: Number(body.min_pop ?? 0.6),
     min_open_interest: Number(body.min_open_interest ?? 100),
     max_bid_ask_pct: Number(body.max_bid_ask_pct ?? 1.0),
     avoid_earnings: body.avoid_earnings !== false,
@@ -140,6 +141,7 @@ exports.handler = async (event) => {
   let results = cfg.tickers.map((ticker, i) => createCandidate(ticker, i, cfg)).filter((row) => {
     if (row.iv_rank < cfg.min_iv_rank) return false;
     if (row.return_on_risk < cfg.min_ror) return false;
+    if (row.probability_estimate < cfg.min_pop) return false;
     if (row.open_interest < cfg.min_open_interest) return false;
     if (row.bid_ask_pct > cfg.max_bid_ask_pct) return false;
     if (cfg.avoid_earnings && row.earnings_days <= 7) return false;

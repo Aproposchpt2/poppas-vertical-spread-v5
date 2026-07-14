@@ -37,30 +37,39 @@ function getSortVal(row, col) {
 }
 
 const els = Object.fromEntries([
-  "scannerForm", "watchlist", "strategy", "dteRange", "ivRank", "ivRankOutput", "minRor", "rorOutput",
+  "scannerForm", "watchlist", "strategy", "dteMin", "dteMax", "ivRank", "ivRankOutput", "minRor", "rorOutput", "minPop", "minPopOutput",
   "minOi", "maxBidAsk", "monthlyChainOnly", "avoidEarnings", "directionalConfirmation", "runButton", "resetButton", "scannerStatus",
   "symbolCount", "qualifiedCount", "topScore", "metricScanned", "metricQualified", "metricRor", "metricScore",
   "resultsSummary", "emptyState", "tableWrap", "resultsBody", "resultSearch", "sortResults", "exportButton",
   "biasChart", "scoreChart", "alertThreshold", "alertsList", "dataModeLabel", "detailDrawer", "drawerBackdrop",
   "closeDrawer", "drawerTitle", "drawerContent", "journalNavButton", "journalCount", "journalDialog", "journalEntries",
-  "closeJournal", "themeButton", "presetProfile", "applyPresetButton"
+  "closeJournal", "themeButton", "presetProfile", "applyPresetButton", "symbolUniverse", "applyUniverseButton"
 ].map(id => [id, document.getElementById(id)]));
 
 const DEFAULTS = {
   monthlyChainOnly: false,
   watchlist: "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, NFLX, CRWD, SPY, QQQ, IWM, GLD, XLF, XLE, XLK, BABA, CRM, ORCL, AVGO, QCOM, MU, TXN, INTC, CSCO, JPM, BAC, GS, MS, WFC, V, MA, PYPL, SQ, AMGN, MRNA, PFE, JNJ, UNH, BA, CAT, GE, HON, DE, UBER, COIN, SHOP, SPOT, SNAP, ADBE, SNOW, PLTR, PANW, NET, DDOG, ZS, OKTA, DELL, EBAY, NOW, MELI, SE, PDD, C, AXP, COF, USB, XOM, CVX, COP, CVS, ABT, MDT, ISRG, HD, LOW, TGT, WMT, COST, SBUX, MCD, NKE, DIS, TLT, GDX, EEM, XBI, RIVN, LCID, NIO, BIDU, APP, TTD, RBLX, ROKU, DASH, LYFT, PINS, ABNB",
   strategy: "auto",
-  dteRange: "21-45",
+  dteMin: 21,
+  dteMax: 45,
   ivRank: 20,
   minRor: 15,
+  minPop: 60,
   minOi: 500,
   maxBidAsk: "0.20",
 };
 
 const PRESETS = {
-  conservative: { ivRank: 30, minRor: 20, minOi: 1000, maxBidAsk: 0.15, avoidEarnings: true, directionalConfirmation: true },
-  balanced: { ivRank: 20, minRor: 15, minOi: 500, maxBidAsk: 0.20, avoidEarnings: true, directionalConfirmation: true },
-  aggressive: { ivRank: 10, minRor: 10, minOi: 250, maxBidAsk: 0.30, avoidEarnings: false, directionalConfirmation: false },
+  conservative: { ivRank: 30, minRor: 20, minPop: 70, minOi: 1000, maxBidAsk: 0.15, avoidEarnings: true, directionalConfirmation: true },
+  balanced: { ivRank: 20, minRor: 15, minPop: 60, minOi: 500, maxBidAsk: 0.20, avoidEarnings: true, directionalConfirmation: true },
+  aggressive: { ivRank: 10, minRor: 10, minPop: 55, minOi: 250, maxBidAsk: 0.30, avoidEarnings: false, directionalConfirmation: false },
+};
+
+const UNIVERSES = {
+  "mega-cap": "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AVGO, NFLX, ADBE, CRM, ORCL, AMD, QCOM, INTC, IBM, CSCO, AMGN, JNJ, UNH, WMT, COST, HD, MCD, XOM, CVX, JPM, BAC, GS, V, MA",
+  "index-etf": "SPY, QQQ, IWM, DIA, VTI, XLF, XLK, XLE, XLI, XLV, XLY, XLP, XLB, XLU, XLC, VNQ, SMH, IBB, ARKK, GLD, SLV, TLT, HYG, EEM",
+  "growth-ai": "NVDA, AMD, AVGO, MU, QCOM, AAPL, MSFT, AMZN, META, GOOGL, NFLX, ADBE, CRWD, PANW, DDOG, NET, SNOW, PLTR, NOW, ORCL, TTD, APP, ANET, ARM, SMCI",
+  "financial-energy": "JPM, BAC, C, WFC, GS, MS, USB, PNC, AXP, COF, V, MA, XOM, CVX, COP, SLB, EOG, OXY, MPC, VLO, XLE, XLF"
 };
 
 function hashString(value) {
@@ -101,7 +110,7 @@ function priceForTicker(ticker, seed) {
 }
 
 function createDemoCandidate(ticker, index, config) {
-  const seed = hashString(`${ticker}-${config.dteRange}-${config.strategy}`);
+  const seed = hashString(`${ticker}-${config.dteMin}-${config.dteMax}-${config.strategy}`);
   const price = priceForTicker(ticker, seed);
   const rawBias = seededUnit(seed, 4) * 1.7 - 0.85;
   const biasScore = Math.max(-1, Math.min(1, rawBias));
@@ -110,8 +119,7 @@ function createDemoCandidate(ticker, index, config) {
   const bullish = forceBull || (!forceBear && biasScore >= 0);
   const spreadType = bullish ? "Bull Put Credit" : "Bear Call Credit";
   const biasLabel = Math.abs(biasScore) > .62 ? `Strong ${bullish ? "Bullish" : "Bearish"}` : bullish ? "Bullish" : "Bearish";
-  const range = config.dteRange.split("-").map(Number);
-  const dte = Math.round(range[0] + seededUnit(seed, 5) * (range[1] - range[0]));
+  const dte = Math.round(config.dteMin + seededUnit(seed, 5) * Math.max(1, (config.dteMax - config.dteMin)));
   const widthChoices = price > 400 ? [5, 10, 15] : price > 150 ? [2.5, 5, 10] : [1, 2.5, 5];
   const width = widthChoices[Math.floor(seededUnit(seed, 6) * widthChoices.length)];
   const cushion = Math.max(width * 1.2, price * (0.035 + seededUnit(seed, 7) * .05));
@@ -159,6 +167,7 @@ function buildDemoResults(tickers, config) {
     if (row.return_on_risk * 100 < config.minRor) return false;
     if (row.open_interest < config.minOi) return false;
     if (row.bid_ask_pct > config.maxBidAsk) return false;
+    if (row.probability_estimate * 100 < config.minPop) return false;
     if (config.avoidEarnings && row.earnings_days <= 7) return false;
     if (config.directionalConfirmation && config.strategy === "auto" && Math.abs(row.bias_score) < .08) return false;
     return true;
@@ -166,12 +175,18 @@ function buildDemoResults(tickers, config) {
 }
 
 function getConfig() {
+  const rawDteMin = Number(els.dteMin.value);
+  const rawDteMax = Number(els.dteMax.value);
+  const dteMin = Math.max(7, Math.min(120, Number.isFinite(rawDteMin) ? rawDteMin : DEFAULTS.dteMin));
+  const dteMax = Math.max(dteMin, Math.min(120, Number.isFinite(rawDteMax) ? rawDteMax : DEFAULTS.dteMax));
   return {
     watchlist: parseTickers(els.watchlist.value),
     strategy: els.strategy.value,
-    dteRange: els.dteRange.value,
+    dteMin,
+    dteMax,
     ivRank: Number(els.ivRank.value),
     minRor: Number(els.minRor.value),
+    minPop: Number(els.minPop.value),
     minOi: Number(els.minOi.value),
     maxBidAsk: Number(els.maxBidAsk.value),
     monthlyChainOnly: els.monthlyChainOnly.checked,
@@ -191,10 +206,11 @@ async function fetchLiveResults(config) {
       body: JSON.stringify({
         tickers: config.watchlist,
         strategy: config.strategy,
-        dte_min: Number(config.dteRange.split("-")[0]),
-        dte_max: Number(config.dteRange.split("-")[1]),
+        dte_min: config.dteMin,
+        dte_max: config.dteMax,
         min_iv_rank: config.ivRank / 100,
         min_ror: config.minRor / 100,
+        min_pop: config.minPop / 100,
         min_open_interest: config.minOi,
         max_bid_ask_pct: config.maxBidAsk,
         monthly_chain_only: config.monthlyChainOnly,
@@ -516,16 +532,20 @@ function exportCsv() {
 function resetForm() {
   els.watchlist.value = DEFAULTS.watchlist;
   els.strategy.value = DEFAULTS.strategy;
-  els.dteRange.value = DEFAULTS.dteRange;
+  els.dteMin.value = DEFAULTS.dteMin;
+  els.dteMax.value = DEFAULTS.dteMax;
   els.ivRank.value = DEFAULTS.ivRank;
   els.minRor.value = DEFAULTS.minRor;
+  els.minPop.value = DEFAULTS.minPop;
   els.rorOutput.value = `${DEFAULTS.minRor}%`;
+  els.minPopOutput.value = `${DEFAULTS.minPop}%`;
   els.minOi.value = DEFAULTS.minOi;
   els.maxBidAsk.value = DEFAULTS.maxBidAsk;
   els.monthlyChainOnly.checked = DEFAULTS.monthlyChainOnly;
   els.avoidEarnings.checked = true;
   els.directionalConfirmation.checked = true;
   els.presetProfile.value = "balanced";
+  els.symbolUniverse.value = "current";
   els.ivRankOutput.value = `${DEFAULTS.ivRank}%`;
   els.monthlyChainOnly.checked = DEFAULTS.monthlyChainOnly;
   els.rorOutput.value = `${DEFAULTS.minRor}%`;
@@ -536,17 +556,29 @@ function applyPreset() {
   if (!preset) return;
   els.ivRank.value = preset.ivRank;
   els.minRor.value = preset.minRor;
+  els.minPop.value = preset.minPop;
   els.minOi.value = preset.minOi;
   els.maxBidAsk.value = preset.maxBidAsk.toFixed(2);
   els.avoidEarnings.checked = preset.avoidEarnings;
   els.directionalConfirmation.checked = preset.directionalConfirmation;
   els.ivRankOutput.value = `${preset.ivRank}%`;
   els.rorOutput.value = `${preset.minRor}%`;
+  els.minPopOutput.value = `${preset.minPop}%`;
+}
+
+function applyUniverse() {
+  const key = els.symbolUniverse.value;
+  if (key === "current") return;
+  const symbols = UNIVERSES[key];
+  if (!symbols) return;
+  els.watchlist.value = symbols;
+  els.symbolCount.textContent = parseTickers(symbols).length;
 }
 
 els.scannerForm.addEventListener("submit", runScanner);
 els.ivRank.addEventListener("input", () => { els.ivRankOutput.value = `${els.ivRank.value}%`; });
 els.minRor.addEventListener("input", () => { els.rorOutput.value = `${els.minRor.value}%`; });
+els.minPop.addEventListener("input", () => { els.minPopOutput.value = `${els.minPop.value}%`; });
 els.watchlist.addEventListener("input", () => { els.symbolCount.textContent = parseTickers(els.watchlist.value).length; });
 els.resultSearch.addEventListener("input", applySearchAndSort);
 els.sortResults.addEventListener("change", applySearchAndSort);
@@ -554,6 +586,7 @@ els.alertThreshold.addEventListener("input", renderAlerts);
 els.exportButton.addEventListener("click", exportCsv);
 els.resetButton.addEventListener("click", resetForm);
 els.applyPresetButton.addEventListener("click", applyPreset);
+els.applyUniverseButton.addEventListener("click", applyUniverse);
 els.closeDrawer.addEventListener("click", closeDetail);
 els.drawerBackdrop.addEventListener("click", closeDetail);
 els.journalNavButton.addEventListener("click", openJournal);
