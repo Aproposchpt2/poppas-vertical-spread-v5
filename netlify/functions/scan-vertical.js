@@ -3,7 +3,8 @@
 // Render has unrestricted Yahoo Finance access; Netlify IPs are blocked.
 'use strict';
 
-const RENDER_API = 'https://poppas-vertical-spread-screener.onrender.com/api/scan';
+// Update RENDER_API to the new dedicated vertical spread service URL once deployed on Render
+const RENDER_API = process.env.VERTICAL_SPREAD_API_URL || 'https://poppas-vertical-spread-screener.onrender.com/api/scan';
 
 const CORS = {
   'Content-Type': 'application/json',
