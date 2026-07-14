@@ -98,6 +98,10 @@ function formatPercent(value, digits = 0) {
   return `${(Number(value) * 100).toFixed(digits)}%`;
 }
 
+function modeLabel(mode) {
+  return mode === "local" ? "Model Data Mode" : "Live Data Mode";
+}
+
 function expirationFromDte(dte) {
   const date = new Date();
   date.setDate(date.getDate() + dte);
@@ -243,10 +247,10 @@ async function runScanner(event) {
   let results;
   try {
     results = await fetchLiveResults(config);
-    state.mode = "live";
+    state.mode = state.mode || "live";
     state.results = results.sort((a, b) => b.score - a.score).map((row, index) => ({ ...row, rank: index + 1 }));
     state.filteredResults = [...state.results];
-    els.dataModeLabel.textContent = "Live Data Mode";
+    els.dataModeLabel.textContent = modeLabel(state.mode);
     els.scannerStatus.textContent = "Complete";
     renderAll(config.watchlist.length);
   } catch (error) {
@@ -325,7 +329,7 @@ function renderTable() {
   els.resultsBody.innerHTML = state.filteredResults.map((row, index) => `
     <tr>
       <td>${index + 1}</td>
-      <td class="symbol-cell"><strong>${row.ticker}</strong><small>${formatMoney(row.price)}</small></td>
+      <td class="symbol-cell"><strong>${row.ticker}</strong><small>${formatMoney(row.price)}${row.price_source === "synthetic" ? " · est" : ""}</small></td>
       <td><span class="badge ${badgeClass(row.bias_label)}">${row.bias_label}</span><div class="sub-value">${Number(row.bias_score).toFixed(2)}</div></td>
       <td>${row.spread_type}</td>
       <td>${row.expiration}<div class="sub-value">${row.dte} DTE</div></td>

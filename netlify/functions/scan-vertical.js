@@ -42,6 +42,22 @@ function expirationFromDte(dte) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function isMonthlyExpiration(date) {
+  return date.getDay() === 5 && date.getDate() >= 15 && date.getDate() <= 21;
+}
+
+function monthlyDtesInRange(dteMin, dteMax) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const matches = [];
+  for (let dte = dteMin; dte <= dteMax; dte += 1) {
+    const probe = new Date(today);
+    probe.setDate(today.getDate() + dte);
+    if (isMonthlyExpiration(probe)) matches.push(dte);
+  }
+  return matches;
+}
+
 function createCandidate(ticker, index, cfg) {
   const seed = hashString(ticker + '-' + cfg.strategy + '-' + cfg.dte_min + '-' + cfg.dte_max);
   const price = Math.round(45 + seededUnit(seed, 2) * 420);
@@ -52,7 +68,11 @@ function createCandidate(ticker, index, cfg) {
   const bullish = forceBull || (!forceBear && biasScore >= 0);
   const spreadType = bullish ? 'Bull Put Credit' : 'Bear Call Credit';
   const biasLabel = Math.abs(biasScore) > 0.62 ? ('Strong ' + (bullish ? 'Bullish' : 'Bearish')) : (bullish ? 'Bullish' : 'Bearish');
-  const dte = Math.round(cfg.dte_min + seededUnit(seed, 5) * Math.max(1, (cfg.dte_max - cfg.dte_min)));
+  const monthlyDtes = cfg.monthly_chain_only ? monthlyDtesInRange(cfg.dte_min, cfg.dte_max) : null;
+  if (cfg.monthly_chain_only && (!monthlyDtes || !monthlyDtes.length)) return null;
+  const dte = cfg.monthly_chain_only
+    ? monthlyDtes[Math.floor(seededUnit(seed, 5) * monthlyDtes.length)]
+    : Math.round(cfg.dte_min + seededUnit(seed, 5) * Math.max(1, (cfg.dte_max - cfg.dte_min)));
   const widthChoices = price > 400 ? [5, 10, 15] : (price > 150 ? [2.5, 5, 10] : [1, 2.5, 5]);
   const width = widthChoices[Math.floor(seededUnit(seed, 6) * widthChoices.length)];
   const cushion = Math.max(width * 1.2, price * (0.035 + seededUnit(seed, 7) * 0.05));
@@ -106,6 +126,8 @@ function createCandidate(ticker, index, cfg) {
     score,
     sector: ['Technology', 'Communication Services', 'Consumer Cyclical', 'Financial Services'][seed % 4],
     liquidity: bidAskPct <= 0.12 ? 'Excellent' : (bidAskPct <= 0.22 ? 'Good' : 'Fair'),
+    monthly_chain: cfg.monthly_chain_only ? true : null,
+    price_source: 'synthetic',
     rank: index + 1
   };
 }
@@ -132,6 +154,7 @@ exports.handler = async (event) => {
     min_pop: Number(body.min_pop ?? 0.6),
     min_open_interest: Number(body.min_open_interest ?? 100),
     max_bid_ask_pct: Number(body.max_bid_ask_pct ?? 1.0),
+    monthly_chain_only: body.monthly_chain_only === true,
     avoid_earnings: body.avoid_earnings !== false,
     require_directional: body.require_directional === true
   };
@@ -139,6 +162,7 @@ exports.handler = async (event) => {
   if (!cfg.tickers.length) return j({ error: 'No tickers provided' }, 400);
 
   let results = cfg.tickers.map((ticker, i) => createCandidate(ticker, i, cfg)).filter((row) => {
+    if (!row) return false;
     if (row.iv_rank < cfg.min_iv_rank) return false;
     if (row.return_on_risk < cfg.min_ror) return false;
     if (row.probability_estimate < cfg.min_pop) return false;
