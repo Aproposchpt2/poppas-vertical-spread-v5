@@ -263,7 +263,7 @@ exports.handler = async (event) => {
     minIvRank: body.min_iv_rank ?? 0.20,
     minRor: body.min_ror ?? 0.15,
     minOI: body.min_open_interest ?? 100,
-    maxBidAsk: body.max_bid_ask_pct ?? 0.25,
+    maxBidAsk: body.max_bid_ask_pct ?? 1.00,
     monthlyOnly: body.monthly_chain_only !== false,
     avoidEarnings: body.avoid_earnings !== false,
   };

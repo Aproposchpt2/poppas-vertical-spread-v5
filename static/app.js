@@ -51,9 +51,9 @@ const DEFAULTS = {
   strategy: "auto",
   dteRange: "21-45",
   ivRank: 20,
-  minRor: 15,
+  minRor: 8,
   minOi: 100,
-  maxBidAsk: "0.25",  // dollars
+  maxBidAsk: "1.00",
 };
 
 function hashString(value) {
@@ -506,6 +506,7 @@ function resetForm() {
   els.dteRange.value = DEFAULTS.dteRange;
   els.ivRank.value = DEFAULTS.ivRank;
   els.minRor.value = DEFAULTS.minRor;
+  els.rorOutput.value = `${DEFAULTS.minRor}%`;
   els.minOi.value = DEFAULTS.minOi;
   els.maxBidAsk.value = DEFAULTS.maxBidAsk;
   els.monthlyChainOnly.checked = true;
