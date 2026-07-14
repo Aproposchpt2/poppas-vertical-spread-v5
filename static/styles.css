@@ -96,6 +96,7 @@ h1 { font-family: Georgia, serif; font-weight: 500; font-size: clamp(42px, 5.5vw
 .hero-scorecard strong { font-family: Georgia, serif; font-size: 30px; font-weight: 500; }
 
 .workspace { display: grid; grid-template-columns: minmax(300px, 370px) minmax(0, 1fr); gap: 22px; padding-top: 28px; align-items: start; }
+.mobile-tabs { display: none; }
 .card { background: linear-gradient(150deg, var(--panel), rgba(12,25,43,.84)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 body.light .card { background: var(--panel); }
 .control-panel { padding: 26px; position: sticky; top: 105px; }
@@ -253,6 +254,34 @@ dialog::backdrop { background: rgba(0,0,0,.62); backdrop-filter: blur(5px); }
   .topbar { grid-template-columns: 1fr auto; padding: 14px 18px; }
   .market-status { display: none; }
   .top-actions .ghost-button { display: none; }
+  .mobile-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    position: sticky;
+    top: 72px;
+    z-index: 15;
+    padding: 10px 2px 0;
+    background: linear-gradient(180deg, rgba(7,17,31,.96), rgba(7,17,31,.78));
+  }
+  body.light .mobile-tabs {
+    background: linear-gradient(180deg, rgba(248,250,252,.97), rgba(248,250,252,.82));
+  }
+  .mobile-tab {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255,255,255,.03);
+    color: var(--muted);
+    padding: 9px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+  .mobile-tab.active {
+    color: #142035;
+    border-color: transparent;
+    background: linear-gradient(135deg, var(--gold-bright), var(--gold));
+  }
   main { padding-inline: 12px; }
   .hero { padding-top: 48px; }
   h1 { font-size: clamp(40px, 12vw, 64px); }
@@ -263,6 +292,7 @@ dialog::backdrop { background: rgba(0,0,0,.62); backdrop-filter: blur(5px); }
   .toolbar-actions { justify-content: flex-start; }
   .search-box, .search-box input { width: 100%; }
   footer { flex-direction: column; }
+  #controlsPanel, #resultsPanel, #chartsPanel, #alertsPanel { scroll-margin-top: 132px; }
 }
 @media (max-width: 480px) {
   .brand small { display: none; }

@@ -609,6 +609,19 @@ function applyUniverse() {
   els.symbolCount.textContent = parseTickers(symbols).length;
 }
 
+function initMobileTabs() {
+  const tabs = [...document.querySelectorAll(".mobile-tab")];
+  if (!tabs.length) return;
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      const section = document.getElementById(tab.dataset.target);
+      if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+}
+
 els.scannerForm.addEventListener("submit", runScanner);
 els.ivRank.addEventListener("input", () => { els.ivRankOutput.value = `${els.ivRank.value}%`; });
 els.minRor.addEventListener("input", () => { els.rorOutput.value = `${els.minRor.value}%`; });
@@ -645,3 +658,4 @@ document.querySelectorAll("th[data-sort]").forEach(th => {
 
 renderJournalCount();
 els.symbolCount.textContent = parseTickers(els.watchlist.value).length;
+initMobileTabs();

@@ -59,8 +59,15 @@
         </aside>
       </section>
 
+      <nav class="mobile-tabs" aria-label="Mobile section navigation">
+        <button class="mobile-tab active" type="button" data-target="controlsPanel">Controls</button>
+        <button class="mobile-tab" type="button" data-target="resultsPanel">Results</button>
+        <button class="mobile-tab" type="button" data-target="chartsPanel">Charts</button>
+        <button class="mobile-tab" type="button" data-target="alertsPanel">Alerts</button>
+      </nav>
+
       <section class="workspace">
-        <aside class="control-panel card" aria-labelledby="controlsTitle">
+        <aside class="control-panel card" aria-labelledby="controlsTitle" id="controlsPanel">
           <div class="card-heading">
             <div>
               <p class="section-kicker">SCANNER CONTROLS</p>
@@ -195,7 +202,7 @@
             </article>
           </div>
 
-          <section class="card results-card">
+          <section class="card results-card" id="resultsPanel">
             <div class="results-toolbar">
               <div>
                 <p class="section-kicker">RANKED CANDIDATES</p>
@@ -248,7 +255,7 @@
             </div>
           </section>
 
-          <section class="insight-grid">
+          <section class="insight-grid" id="chartsPanel">
             <article class="card chart-card">
               <div class="card-heading compact">
                 <div><p class="section-kicker">BIAS ENGINE</p><h3>Directional scores</h3></div>
@@ -263,7 +270,7 @@
             </article>
           </section>
 
-          <section class="card alerts-card">
+          <section class="card alerts-card" id="alertsPanel">
             <div class="card-heading compact">
               <div>
                 <p class="section-kicker">HIGH-CONVICTION WATCHLIST</p>
