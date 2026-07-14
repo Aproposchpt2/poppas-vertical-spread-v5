@@ -138,22 +138,22 @@ function selectSpread(chain, price, bullish, cfg) {
 // ── Main scan ─────────────────────────────────────────────────────────────────
 
 async function scanSymbol(symbol, cfg) {
-  const ticker = await yahooFinance.quoteSummary(symbol, {
-    modules: ['price', 'calendarEvents'],
-  }).catch(() => null);
-  if (!ticker) return null;
+  // Use quote() — /v7/finance/quote is not blocked; quoteSummary /v10 is blocked on cloud IPs
+  const q = await yahooFinance.quote(symbol).catch(() => null);
+  if (!q) return null;
 
-  const price = ticker.price?.regularMarketPrice ?? 0;
+  const price = q.regularMarketPrice ?? 0;
   if (price <= 0) return null;
 
-  // Earnings check
-  const earningsRaw = ticker.calendarEvents?.earnings?.earningsDate?.[0] ?? null;
+  // Earnings from quote response timestamps
+  const earningsTs = q.earningsTimestamp ?? q.earningsTimestampStart ?? null;
+  const earningsRaw = earningsTs ? new Date(earningsTs * 1000) : null;
   const earningsDays = earningsRaw
-    ? Math.round((new Date(earningsRaw) - Date.now()) / 86400000)
+    ? Math.round((earningsRaw - Date.now()) / 86400000)
     : 999;
-  if (cfg.avoidEarnings && earningsDays <= 7) return null;
+  if (cfg.avoidEarnings && earningsDays >= 0 && earningsDays <= 7) return null;
   const earningsDate = earningsRaw
-    ? String(new Date(earningsRaw).getMonth() + 1).padStart(2, "0") + "/" + String(new Date(earningsRaw).getDate()).padStart(2, "0")
+    ? String(earningsRaw.getMonth() + 1).padStart(2, "0") + "/" + String(earningsRaw.getDate()).padStart(2, "0")
     : "—";
 
   // Historical prices for bias
@@ -242,11 +242,11 @@ async function debug(event) {
   const sym = (event.queryStringParameters?.ticker || 'AAPL').toUpperCase();
   const log = [];
   try {
-    // Step 1: price
-    const ticker = await yahooFinance.quoteSummary(sym, { modules: ['price', 'calendarEvents'] }).catch(e => { log.push('quoteSummary error: ' + e.message); return null; });
-    if (!ticker) return j({ sym, log, step: 'quoteSummary failed' });
-    const price = ticker.price?.regularMarketPrice ?? 0;
-    log.push('price: ' + price);
+    // Step 1: price via quote() — v7 endpoint not blocked
+    const q = await yahooFinance.quote(sym).catch(e => { log.push('quote error: ' + e.message); return null; });
+    if (!q) return j({ sym, log, step: 'quote failed' });
+    const price = q.regularMarketPrice ?? 0;
+    log.push('price: ' + price + ', earningsTs: ' + (q.earningsTimestamp ?? 'none'));
     if (price <= 0) return j({ sym, log, step: 'price <= 0' });
 
     // Step 2: expirations
