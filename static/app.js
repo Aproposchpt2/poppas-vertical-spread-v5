@@ -221,11 +221,6 @@ async function fetchLiveResults(config) {
         strategy: config.strategy,
         dte_min: config.dteMin,
         dte_max: config.dteMax,
-        min_iv_rank: config.ivRank / 100,
-        min_ror: config.minRor / 100,
-        min_pop: config.minPop / 100,
-        min_open_interest: config.minOi,
-        max_bid_ask_pct: config.maxBidAsk,
         monthly_chain_only: config.monthlyChainOnly,
         require_directional: config.directionalConfirmation,
         avoid_earnings: config.avoidEarnings,
@@ -305,12 +300,21 @@ function renderAll(scannedCount) {
 }
 
 function applySearchAndSort() {
-  const query = els.resultSearch.value.trim().toLowerCase();
-  const sort = els.sortResults.value;
+  const query      = els.resultSearch.value.trim().toLowerCase();
+  const sort       = els.sortResults.value;
   const minProbOtm = Number(els.minPop.value) / 100;
+  const minIvRank  = Number(els.ivRank.value) / 100;
+  const minRor     = Number(els.minRor.value) / 100;
+  const minOi      = Number(els.minOi.value);
+  const maxBidAsk  = Number(els.maxBidAsk.value);
+
   let rows = state.results.filter(row => {
-    if (`${row.ticker} ${row.spread_type} ${row.bias_label}`.toLowerCase().includes(query) === false) return false;
-    if ((row.probability_estimate ?? 0) < minProbOtm) return false;
+    if (!`${row.ticker} ${row.spread_type} ${row.bias_label}`.toLowerCase().includes(query)) return false;
+    if ((row.probability_estimate ?? 0) < minProbOtm)  return false;
+    if ((row.iv_rank ?? 0) < minIvRank)                return false;
+    if ((row.return_on_risk ?? 0) < minRor)            return false;
+    if ((row.open_interest ?? 0) < minOi)              return false;
+    if ((row.bid_ask_pct ?? 0) > maxBidAsk)            return false;
     return true;
   });
 
@@ -641,12 +645,13 @@ function initMobileTabs() {
 }
 
 els.scannerForm.addEventListener("submit", runScanner);
-els.ivRank.addEventListener("input", () => { els.ivRankOutput.value = `${els.ivRank.value}%`; });
-els.minRor.addEventListener("input", () => { els.rorOutput.value = `${els.minRor.value}%`; });
-els.minPop.addEventListener("input", () => {
-  els.minPopOutput.value = `${els.minPop.value}%`;
-  if (state.results.length) applySearchAndSort();
-});
+function liveFilter() { if (state.results.length) applySearchAndSort(); }
+
+els.ivRank.addEventListener("input",   () => { els.ivRankOutput.value  = `${els.ivRank.value}%`;  liveFilter(); });
+els.minRor.addEventListener("input",   () => { els.rorOutput.value     = `${els.minRor.value}%`;  liveFilter(); });
+els.minPop.addEventListener("input",   () => { els.minPopOutput.value  = `${els.minPop.value}%`;  liveFilter(); });
+els.minOi.addEventListener("input",    () => liveFilter());
+els.maxBidAsk.addEventListener("input",() => liveFilter());
 els.watchlist.addEventListener("input", () => { els.symbolCount.textContent = parseTickers(els.watchlist.value).length; });
 els.resultSearch.addEventListener("input", applySearchAndSort);
 els.sortResults.addEventListener("change", applySearchAndSort);
