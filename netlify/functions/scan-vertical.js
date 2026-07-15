@@ -79,7 +79,9 @@ function createCandidate(ticker, index, cfg, livePrice = null, priceTimestamp = 
     : Math.round(cfg.dte_min + seededUnit(seed, 5) * Math.max(1, (cfg.dte_max - cfg.dte_min)));
   const widthChoices = price > 400 ? [5, 10, 15] : (price > 150 ? [2.5, 5, 10] : [1, 2.5, 5]);
   const width = widthChoices[Math.floor(seededUnit(seed, 6) * widthChoices.length)];
-  const cushion = Math.max(width * 1.5, price * (0.05 + seededUnit(seed, 7) * 0.15));
+  // Minimum cushion needed to hit min_pop floor, plus seeded variation for spread diversity
+  const minCushionPct = Math.max(0.05, (cfg.min_pop - 0.58 - 0.04) / 1.7);
+  const cushion = Math.max(width * 1.5, price * (minCushionPct + seededUnit(seed, 7) * 0.10));
   const shortStrikeRaw = bullish ? price - cushion : price + cushion;
   const strikeStep = width >= 5 ? 5 : width;
   const shortStrike = Math.round(shortStrikeRaw / strikeStep) * strikeStep;
