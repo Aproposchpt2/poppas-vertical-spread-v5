@@ -226,8 +226,10 @@ async function fetchLiveResults(config) {
         avoid_earnings: config.avoidEarnings,
       }),
     });
+    if (response.status === 429) throw new Error("RATE_LIMIT");
     if (!response.ok) throw new Error(`API ${response.status}`);
     const payload = await response.json();
+    if (payload.error) throw new Error(payload.error);
     if (!Array.isArray(payload.results)) throw new Error("Invalid response");
     state.mode = payload.mode || "live";
     return payload.results;
@@ -264,8 +266,13 @@ async function runScanner(event) {
     els.scannerStatus.textContent = "Error";
     els.emptyState.classList.remove("hidden");
     els.tableWrap.classList.add("hidden");
-    els.emptyState.querySelector("h3").textContent = "Live scan unavailable";
-    els.emptyState.querySelector("p").textContent = "Could not reach Alpha Vantage data. Check your connection and try again during market hours (9:30 AM – 4:00 PM ET).";
+    const isRateLimit = error.message === "RATE_LIMIT" || error.message.includes("429");
+    els.emptyState.querySelector("h3").textContent = isRateLimit
+      ? "Daily API limit reached"
+      : "Live scan unavailable";
+    els.emptyState.querySelector("p").textContent = isRateLimit
+      ? "Market Data App free tier allows 100 calls per day. Limit resets at midnight. Upgrade your plan at marketdata.app for unlimited access."
+      : "Could not reach the data source. Check your connection and try again.";
     els.resultsSummary.textContent = "Scan failed — no results to display.";
   }
   setLoading(false);
