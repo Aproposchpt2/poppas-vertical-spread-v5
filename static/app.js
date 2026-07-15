@@ -53,16 +53,16 @@ const DEFAULTS = {
   dteMin: 21,
   dteMax: 45,
   ivRank: 20,
-  minRor: 15,
+  minRor: 1,
   minPop: 80,
   minOi: 500,
   maxBidAsk: "0.20",
 };
 
 const PRESETS = {
-  conservative: { ivRank: 30, minRor: 20, minPop: 90, minOi: 1000, maxBidAsk: 0.15, avoidEarnings: true, directionalConfirmation: true },
-  balanced: { ivRank: 20, minRor: 15, minPop: 80, minOi: 500, maxBidAsk: 0.20, avoidEarnings: true, directionalConfirmation: true },
-  aggressive: { ivRank: 10, minRor: 10, minPop: 80, minOi: 250, maxBidAsk: 0.30, avoidEarnings: false, directionalConfirmation: false },
+  conservative: { ivRank: 30, minRor: 10, minPop: 90, minOi: 1000, maxBidAsk: 0.15, avoidEarnings: true, directionalConfirmation: true },
+  balanced: { ivRank: 20, minRor: 5, minPop: 80, minOi: 500, maxBidAsk: 0.20, avoidEarnings: true, directionalConfirmation: true },
+  aggressive: { ivRank: 10, minRor: 1, minPop: 80, minOi: 250, maxBidAsk: 0.30, avoidEarnings: false, directionalConfirmation: false },
 };
 
 const UNIVERSES = {
