@@ -60,9 +60,11 @@ function monthlyDtesInRange(dteMin, dteMax) {
   return matches;
 }
 
-function createCandidate(ticker, index, cfg) {
+function createCandidate(ticker, index, cfg, livePrice = null, priceTimestamp = null) {
   const seed = hashString(ticker + '-' + cfg.strategy + '-' + cfg.dte_min + '-' + cfg.dte_max);
-  const price = Math.round(45 + seededUnit(seed, 2) * 420);
+  const syntheticPrice = Math.round(45 + seededUnit(seed, 2) * 420);
+  const price = livePrice || syntheticPrice;
+  const priceSource = livePrice ? 'alpha-vantage' : 'synthetic';
   const rawBias = seededUnit(seed, 4) * 1.7 - 0.85;
   const biasScore = Math.max(-1, Math.min(1, rawBias));
   const forceBull = cfg.strategy === 'bull_put';
@@ -129,7 +131,8 @@ function createCandidate(ticker, index, cfg) {
     sector: ['Technology', 'Communication Services', 'Consumer Cyclical', 'Financial Services'][seed % 4],
     liquidity: bidAskPct <= 0.12 ? 'Excellent' : (bidAskPct <= 0.22 ? 'Good' : 'Fair'),
     monthly_chain: cfg.monthly_chain_only ? true : null,
-    price_source: 'synthetic',
+    price_source: priceSource,
+    price_timestamp: priceTimestamp || null,
     rank: index + 1
   };
 }
@@ -209,7 +212,16 @@ exports.handler = async (event) => {
 
   if (!cfg.tickers.length) return j({ error: 'No tickers provided' }, 400);
 
-  let results = cfg.tickers.map((ticker, i) => createCandidate(ticker, i, cfg)).filter((row) => {
+  // Fetch live prices FIRST so strikes and probabilities are computed from real prices
+  const quoteMap = await fetchLiveQuoteMap(cfg.tickers);
+  let livePriceCount = 0;
+
+  let results = cfg.tickers.map((ticker, i) => {
+    const live = quoteMap.get(ticker);
+    const livePrice = live ? Number(live.price.toFixed(2)) : null;
+    if (live) livePriceCount++;
+    return createCandidate(ticker, i, cfg, livePrice, live?.latestTradingDay || null);
+  }).filter((row) => {
     if (!row) return false;
     if (row.iv_rank < cfg.min_iv_rank) return false;
     if (row.return_on_risk < cfg.min_ror) return false;
@@ -223,28 +235,13 @@ exports.handler = async (event) => {
 
   results = results.sort((a, b) => b.score - a.score).map((row, index) => ({ ...row, rank: index + 1 }));
 
-  const quoteSymbols = [...new Set(results.map((row) => row.ticker))];
-  const quoteMap = await fetchLiveQuoteMap(quoteSymbols);
-  let livePriceCount = 0;
-  results = results.map((row) => {
-    const live = quoteMap.get(row.ticker);
-    if (!live) return row;
-    livePriceCount += 1;
-    return {
-      ...row,
-      price: Number(live.price.toFixed(2)),
-      price_source: 'alpha-vantage',
-      price_timestamp: live.latestTradingDay || null
-    };
-  });
-
   return j({
     mode: livePriceCount > 0 ? 'live' : 'local',
     results,
     quote_prices: {
-      requested: quoteSymbols.length,
+      requested: cfg.tickers.length,
       live: livePriceCount,
-      synthetic: quoteSymbols.length - livePriceCount
+      synthetic: cfg.tickers.length - livePriceCount
     }
   });
 };
