@@ -159,7 +159,7 @@ function createDemoCandidate(ticker, index, config) {
   ));
   const breakeven = bullish ? shortStrike - creditPerShare : shortStrike + creditPerShare;
   const maxProfit = credit;
-  const probabilityEstimate = Math.max(.51, Math.min(.88, .58 + cushion / price * 1.7 + seededUnit(seed, 14) * .08));
+  const probabilityEstimate = Math.max(.51, Math.min(.97, .58 + cushion / price * 1.7 + seededUnit(seed, 14) * .08));
 
   return {
     ticker, price, bias_score: biasScore, bias_label: biasLabel, spread_type: spreadType,

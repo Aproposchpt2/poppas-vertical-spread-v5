@@ -105,7 +105,7 @@ function createCandidate(ticker, index, cfg, livePrice = null, priceTimestamp = 
   ));
   const breakeven = bullish ? shortStrike - creditPerShare : shortStrike + creditPerShare;
   const maxProfit = credit;
-  const probabilityEstimate = Math.max(0.51, Math.min(0.88, 0.58 + cushion / price * 1.7 + seededUnit(seed, 14) * 0.08));
+  const probabilityEstimate = Math.max(0.51, Math.min(0.97, 0.58 + cushion / price * 1.7 + seededUnit(seed, 14) * 0.08));
 
   return {
     ticker,
