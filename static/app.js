@@ -307,7 +307,12 @@ function renderAll(scannedCount) {
 function applySearchAndSort() {
   const query = els.resultSearch.value.trim().toLowerCase();
   const sort = els.sortResults.value;
-  let rows = state.results.filter(row => `${row.ticker} ${row.spread_type} ${row.bias_label}`.toLowerCase().includes(query));
+  const minProbOtm = Number(els.minPop.value) / 100;
+  let rows = state.results.filter(row => {
+    if (`${row.ticker} ${row.spread_type} ${row.bias_label}`.toLowerCase().includes(query) === false) return false;
+    if ((row.probability_estimate ?? 0) < minProbOtm) return false;
+    return true;
+  });
 
   if (sortCol) {
     rows.sort((a, b) => {
@@ -638,7 +643,10 @@ function initMobileTabs() {
 els.scannerForm.addEventListener("submit", runScanner);
 els.ivRank.addEventListener("input", () => { els.ivRankOutput.value = `${els.ivRank.value}%`; });
 els.minRor.addEventListener("input", () => { els.rorOutput.value = `${els.minRor.value}%`; });
-els.minPop.addEventListener("input", () => { els.minPopOutput.value = `${els.minPop.value}%`; });
+els.minPop.addEventListener("input", () => {
+  els.minPopOutput.value = `${els.minPop.value}%`;
+  if (state.results.length) applySearchAndSort();
+});
 els.watchlist.addEventListener("input", () => { els.symbolCount.textContent = parseTickers(els.watchlist.value).length; });
 els.resultSearch.addEventListener("input", applySearchAndSort);
 els.sortResults.addEventListener("change", applySearchAndSort);
