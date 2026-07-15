@@ -59,8 +59,15 @@
         </aside>
       </section>
 
+      <nav class="mobile-tabs" aria-label="Mobile section navigation">
+        <button class="mobile-tab active" type="button" data-target="controlsPanel">Controls</button>
+        <button class="mobile-tab" type="button" data-target="resultsPanel">Results</button>
+        <button class="mobile-tab" type="button" data-target="chartsPanel">Charts</button>
+        <button class="mobile-tab" type="button" data-target="alertsPanel">Alerts</button>
+      </nav>
+
       <section class="workspace">
-        <aside class="control-panel card" aria-labelledby="controlsTitle">
+        <aside class="control-panel card" aria-labelledby="controlsTitle" id="controlsPanel">
           <div class="card-heading">
             <div>
               <p class="section-kicker">SCANNER CONTROLS</p>
@@ -76,6 +83,34 @@
               <small>Enter ticker symbols separated by commas or spaces.</small>
             </label>
 
+            <label class="field field-wide">
+              <span>Scan profile</span>
+              <div class="preset-row">
+                <select id="presetProfile">
+                  <option value="balanced" selected>Balanced (Recommended)</option>
+                  <option value="conservative">Conservative</option>
+                  <option value="aggressive">Aggressive</option>
+                </select>
+                <button class="ghost-button" id="applyPresetButton" type="button">Apply Profile</button>
+              </div>
+              <small>Profiles tune filters so customers can focus on higher-quality setups faster.</small>
+            </label>
+
+            <label class="field field-wide">
+              <span>Symbol universe</span>
+              <div class="preset-row">
+                <select id="symbolUniverse">
+                  <option value="current" selected>Current watchlist</option>
+                  <option value="mega-cap">US mega caps (liquid)</option>
+                  <option value="index-etf">Index & sector ETFs</option>
+                  <option value="growth-ai">Growth & AI leaders</option>
+                  <option value="financial-energy">Financials & energy</option>
+                </select>
+                <button class="ghost-button" id="applyUniverseButton" type="button">Load Universe</button>
+              </div>
+              <small>Quickly swap the records sent to the screener without manual ticker edits.</small>
+            </label>
+
             <div class="form-grid">
               <label class="field">
                 <span>Strategy</span>
@@ -88,40 +123,40 @@
 
               <label class="field">
                 <span>Expiration range</span>
-                <select id="dteRange">
-                  <option value="14-30">14–30 DTE</option>
-                  <option value="21-45" selected>21–45 DTE</option>
-                  <option value="30-60">30–60 DTE</option>
-                  <option value="45-75">45–75 DTE</option>
-                </select>
+                <div class="dte-band">
+                  <input id="dteMin" type="number" min="7" max="120" step="1" value="21" />
+                  <span>to</span>
+                  <input id="dteMax" type="number" min="7" max="120" step="1" value="45" />
+                </div>
+                <small>Set a custom DTE band for contract selection.</small>
               </label>
 
               <label class="field">
                 <span>Minimum IV rank</span>
-                <output id="ivRankOutput" for="ivRank">5%</output>
-                <input id="ivRank" type="range" min="0" max="100" value="5" step="5" />
+                <output id="ivRankOutput" for="ivRank">20%</output>
+                <input id="ivRank" type="range" min="0" max="100" value="20" step="5" />
               </label>
 
               <label class="field">
                 <span>Minimum return on risk</span>
-                <output id="rorOutput" for="minRor">5%</output>
-                <input id="minRor" type="range" min="5" max="100" value="5" step="1" />
+                <output id="rorOutput" for="minRor">15%</output>
+                <input id="minRor" type="range" min="5" max="100" value="15" step="1" />
               </label>
 
               <label class="field">
-                <span>Anchor Strike Prob OTM</span>
-                <output id="probOtmOutput" for="minProbOtm">80%</output>
-                <input id="minProbOtm" type="range" min="80" max="97" value="80" step="1" />
+                <span>Minimum estimated POP</span>
+                <output id="minPopOutput" for="minPop">60%</output>
+                <input id="minPop" type="range" min="50" max="90" value="60" step="1" />
               </label>
 
               <label class="field">
                 <span>Minimum open interest</span>
-                <input id="minOi" type="number" min="0" step="50" value="100" />
+                <input id="minOi" type="number" min="0" step="50" value="500" />
               </label>
 
               <label class="field">
                 <span>Maximum bid/ask spread ($)</span>
-                <input id="maxBidAsk" type="number" min="0.05" max="5.00" step="0.05" value="1.00" />
+                <input id="maxBidAsk" type="number" min="0.05" max="5.00" step="0.05" value="0.20" />
               </label>
             </div>
 
@@ -138,7 +173,7 @@
               </label>
               <label class="toggle-row">
                 <span><strong>Require directional confirmation</strong><small>Match spread direction to the bias engine.</small></span>
-                <input id="directionalConfirmation" type="checkbox" />
+                <input id="directionalConfirmation" type="checkbox" checked />
                 <i aria-hidden="true"></i>
               </label>
             </div>
@@ -147,7 +182,7 @@
               <span class="button-label">Run Vertical Spread Scan</span>
               <span class="button-spinner" aria-hidden="true"></span>
             </button>
-            <p class="control-note">Live data via Yahoo Finance · 15-min delay · Markets open 9:30 AM – 4:00 PM ET</p>
+            <p class="control-note">Live data via Alpha Vantage · 15-min delay · Markets open 9:30 AM – 4:00 PM ET</p>
           </form>
         </aside>
 
@@ -167,7 +202,7 @@
             </article>
           </div>
 
-          <section class="card results-card">
+          <section class="card results-card" id="resultsPanel">
             <div class="results-toolbar">
               <div>
                 <p class="section-kicker">RANKED CANDIDATES</p>
@@ -192,7 +227,7 @@
             <div class="empty-state" id="emptyState">
               <div class="empty-icon">↗</div>
               <h3>Your ranked spread candidates will appear here.</h3>
-              <p>The demonstration scan uses deterministic sample values so the interface can be reviewed without a live market-data connection.</p>
+              <p>Scanner prices use live quote pulls when available and clearly mark estimated values if a quote cannot be retrieved.</p>
             </div>
 
             <div class="table-wrap hidden" id="tableWrap">
@@ -209,7 +244,7 @@
                     <th data-sort="credit">Credit</th>
                     <th data-sort="maxrisk">Max risk</th>
                     <th data-sort="ror">ROR</th>
-                    <th data-sort="probotm">Prob OTM</th>
+                    <th data-sort="pop">Est. POP</th>
                     <th data-sort="ivrank">IV rank</th>
                     <th data-sort="score">Score</th>
                     <th></th>
@@ -220,7 +255,7 @@
             </div>
           </section>
 
-          <section class="insight-grid">
+          <section class="insight-grid" id="chartsPanel">
             <article class="card chart-card">
               <div class="card-heading compact">
                 <div><p class="section-kicker">BIAS ENGINE</p><h3>Directional scores</h3></div>
@@ -235,7 +270,7 @@
             </article>
           </section>
 
-          <section class="card alerts-card">
+          <section class="card alerts-card" id="alertsPanel">
             <div class="card-heading compact">
               <div>
                 <p class="section-kicker">HIGH-CONVICTION WATCHLIST</p>

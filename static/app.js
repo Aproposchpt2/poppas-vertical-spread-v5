@@ -29,7 +29,7 @@ function getSortVal(row, col) {
     case "credit":   return row.credit ?? 0;
     case "maxrisk":  return row.max_risk ?? 0;
     case "ror":      return row.return_on_risk ?? 0;
-    case "probotm":  return row.probability_estimate ?? 0;
+    case "pop":      return row.probability_estimate ?? 0;
     case "ivrank":   return row.iv_rank ?? 0;
     case "score":    return row.score ?? 0;
     default:         return 0;
@@ -37,25 +37,39 @@ function getSortVal(row, col) {
 }
 
 const els = Object.fromEntries([
-  "scannerForm", "watchlist", "strategy", "dteRange", "ivRank", "ivRankOutput", "minRor", "rorOutput",
-  "minProbOtm", "probOtmOutput",
+  "scannerForm", "watchlist", "strategy", "dteMin", "dteMax", "ivRank", "ivRankOutput", "minRor", "rorOutput", "minPop", "minPopOutput",
   "minOi", "maxBidAsk", "monthlyChainOnly", "avoidEarnings", "directionalConfirmation", "runButton", "resetButton", "scannerStatus",
   "symbolCount", "qualifiedCount", "topScore", "metricScanned", "metricQualified", "metricRor", "metricScore",
   "resultsSummary", "emptyState", "tableWrap", "resultsBody", "resultSearch", "sortResults", "exportButton",
   "biasChart", "scoreChart", "alertThreshold", "alertsList", "dataModeLabel", "detailDrawer", "drawerBackdrop",
   "closeDrawer", "drawerTitle", "drawerContent", "journalNavButton", "journalCount", "journalDialog", "journalEntries",
-  "closeJournal", "themeButton"
+  "closeJournal", "themeButton", "presetProfile", "applyPresetButton", "symbolUniverse", "applyUniverseButton"
 ].map(id => [id, document.getElementById(id)]));
 
 const DEFAULTS = {
   monthlyChainOnly: false,
   watchlist: "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AMD, NFLX, CRWD, SPY, QQQ, IWM, GLD, XLF, XLE, XLK, BABA, CRM, ORCL, AVGO, QCOM, MU, TXN, INTC, CSCO, JPM, BAC, GS, MS, WFC, V, MA, PYPL, SQ, AMGN, MRNA, PFE, JNJ, UNH, BA, CAT, GE, HON, DE, UBER, COIN, SHOP, SPOT, SNAP, ADBE, SNOW, PLTR, PANW, NET, DDOG, ZS, OKTA, DELL, EBAY, NOW, MELI, SE, PDD, C, AXP, COF, USB, XOM, CVX, COP, CVS, ABT, MDT, ISRG, HD, LOW, TGT, WMT, COST, SBUX, MCD, NKE, DIS, TLT, GDX, EEM, XBI, RIVN, LCID, NIO, BIDU, APP, TTD, RBLX, ROKU, DASH, LYFT, PINS, ABNB",
   strategy: "auto",
-  dteRange: "21-45",
-  ivRank: 5,
-  minRor: 5,
-  minOi: 100,
-  maxBidAsk: "1.00",
+  dteMin: 21,
+  dteMax: 45,
+  ivRank: 20,
+  minRor: 15,
+  minPop: 60,
+  minOi: 500,
+  maxBidAsk: "0.20",
+};
+
+const PRESETS = {
+  conservative: { ivRank: 30, minRor: 20, minPop: 70, minOi: 1000, maxBidAsk: 0.15, avoidEarnings: true, directionalConfirmation: true },
+  balanced: { ivRank: 20, minRor: 15, minPop: 60, minOi: 500, maxBidAsk: 0.20, avoidEarnings: true, directionalConfirmation: true },
+  aggressive: { ivRank: 10, minRor: 10, minPop: 55, minOi: 250, maxBidAsk: 0.30, avoidEarnings: false, directionalConfirmation: false },
+};
+
+const UNIVERSES = {
+  "mega-cap": "AAPL, MSFT, NVDA, AMZN, META, GOOGL, TSLA, AVGO, NFLX, ADBE, CRM, ORCL, AMD, QCOM, INTC, IBM, CSCO, AMGN, JNJ, UNH, WMT, COST, HD, MCD, XOM, CVX, JPM, BAC, GS, V, MA",
+  "index-etf": "SPY, QQQ, IWM, DIA, VTI, XLF, XLK, XLE, XLI, XLV, XLY, XLP, XLB, XLU, XLC, VNQ, SMH, IBB, ARKK, GLD, SLV, TLT, HYG, EEM",
+  "growth-ai": "NVDA, AMD, AVGO, MU, QCOM, AAPL, MSFT, AMZN, META, GOOGL, NFLX, ADBE, CRWD, PANW, DDOG, NET, SNOW, PLTR, NOW, ORCL, TTD, APP, ANET, ARM, SMCI",
+  "financial-energy": "JPM, BAC, C, WFC, GS, MS, USB, PNC, AXP, COF, V, MA, XOM, CVX, COP, SLB, EOG, OXY, MPC, VLO, XLE, XLF"
 };
 
 function hashString(value) {
@@ -80,8 +94,21 @@ function formatMoney(value) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 }
 
+function formatSymbolPrice(value) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
 function formatPercent(value, digits = 0) {
   return `${(Number(value) * 100).toFixed(digits)}%`;
+}
+
+function modeLabel(mode) {
+  return mode === "local" ? "Model Data Mode" : "Live Data Mode";
 }
 
 function expirationFromDte(dte) {
@@ -96,7 +123,7 @@ function priceForTicker(ticker, seed) {
 }
 
 function createDemoCandidate(ticker, index, config) {
-  const seed = hashString(`${ticker}-${config.dteRange}-${config.strategy}`);
+  const seed = hashString(`${ticker}-${config.dteMin}-${config.dteMax}-${config.strategy}`);
   const price = priceForTicker(ticker, seed);
   const rawBias = seededUnit(seed, 4) * 1.7 - 0.85;
   const biasScore = Math.max(-1, Math.min(1, rawBias));
@@ -105,8 +132,7 @@ function createDemoCandidate(ticker, index, config) {
   const bullish = forceBull || (!forceBear && biasScore >= 0);
   const spreadType = bullish ? "Bull Put Credit" : "Bear Call Credit";
   const biasLabel = Math.abs(biasScore) > .62 ? `Strong ${bullish ? "Bullish" : "Bearish"}` : bullish ? "Bullish" : "Bearish";
-  const range = config.dteRange.split("-").map(Number);
-  const dte = Math.round(range[0] + seededUnit(seed, 5) * (range[1] - range[0]));
+  const dte = Math.round(config.dteMin + seededUnit(seed, 5) * Math.max(1, (config.dteMax - config.dteMin)));
   const widthChoices = price > 400 ? [5, 10, 15] : price > 150 ? [2.5, 5, 10] : [1, 2.5, 5];
   const width = widthChoices[Math.floor(seededUnit(seed, 6) * widthChoices.length)];
   const cushion = Math.max(width * 1.2, price * (0.035 + seededUnit(seed, 7) * .05));
@@ -154,26 +180,31 @@ function buildDemoResults(tickers, config) {
     if (row.return_on_risk * 100 < config.minRor) return false;
     if (row.open_interest < config.minOi) return false;
     if (row.bid_ask_pct > config.maxBidAsk) return false;
+    if (row.probability_estimate * 100 < config.minPop) return false;
     if (config.avoidEarnings && row.earnings_days <= 7) return false;
     if (config.directionalConfirmation && config.strategy === "auto" && Math.abs(row.bias_score) < .08) return false;
-    if ((row.probability_estimate ?? 0) * 100 < config.minProbOtm) return false;
     return true;
   }).sort((a, b) => b.score - a.score).map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
 function getConfig() {
+  const rawDteMin = Number(els.dteMin.value);
+  const rawDteMax = Number(els.dteMax.value);
+  const dteMin = Math.max(7, Math.min(120, Number.isFinite(rawDteMin) ? rawDteMin : DEFAULTS.dteMin));
+  const dteMax = Math.max(dteMin, Math.min(120, Number.isFinite(rawDteMax) ? rawDteMax : DEFAULTS.dteMax));
   return {
     watchlist: parseTickers(els.watchlist.value),
     strategy: els.strategy.value,
-    dteRange: els.dteRange.value,
+    dteMin,
+    dteMax,
     ivRank: Number(els.ivRank.value),
     minRor: Number(els.minRor.value),
+    minPop: Number(els.minPop.value),
     minOi: Number(els.minOi.value),
     maxBidAsk: Number(els.maxBidAsk.value),
     monthlyChainOnly: els.monthlyChainOnly.checked,
     avoidEarnings: els.avoidEarnings.checked,
     directionalConfirmation: els.directionalConfirmation.checked,
-    minProbOtm: Number(els.minProbOtm.value),
   };
 }
 
@@ -188,16 +219,16 @@ async function fetchLiveResults(config) {
       body: JSON.stringify({
         tickers: config.watchlist,
         strategy: config.strategy,
-        dte_min: Number(config.dteRange.split("-")[0]),
-        dte_max: Number(config.dteRange.split("-")[1]),
+        dte_min: config.dteMin,
+        dte_max: config.dteMax,
         min_iv_rank: config.ivRank / 100,
         min_ror: config.minRor / 100,
+        min_pop: config.minPop / 100,
         min_open_interest: config.minOi,
         max_bid_ask_pct: config.maxBidAsk,
         monthly_chain_only: config.monthlyChainOnly,
         require_directional: config.directionalConfirmation,
         avoid_earnings: config.avoidEarnings,
-        min_prob_otm: config.minProbOtm / 100,
       }),
     });
     if (!response.ok) throw new Error(`API ${response.status}`);
@@ -225,10 +256,10 @@ async function runScanner(event) {
   let results;
   try {
     results = await fetchLiveResults(config);
-    state.mode = "live";
+    state.mode = state.mode || "live";
     state.results = results.sort((a, b) => b.score - a.score).map((row, index) => ({ ...row, rank: index + 1 }));
     state.filteredResults = [...state.results];
-    els.dataModeLabel.textContent = "Live Data Mode";
+    els.dataModeLabel.textContent = modeLabel(state.mode);
     els.scannerStatus.textContent = "Complete";
     renderAll(config.watchlist.length);
   } catch (error) {
@@ -239,7 +270,7 @@ async function runScanner(event) {
     els.emptyState.classList.remove("hidden");
     els.tableWrap.classList.add("hidden");
     els.emptyState.querySelector("h3").textContent = "Live scan unavailable";
-    els.emptyState.querySelector("p").textContent = "Could not reach Yahoo Finance data. Check your connection and try again during market hours (9:30 AM – 4:00 PM ET).";
+    els.emptyState.querySelector("p").textContent = "Could not reach Alpha Vantage data. Check your connection and try again during market hours (9:30 AM – 4:00 PM ET).";
     els.resultsSummary.textContent = "Scan failed — no results to display.";
   }
   setLoading(false);
@@ -255,13 +286,17 @@ function renderAll(scannedCount) {
   const rows = state.results;
   const avgRor = rows.length ? rows.reduce((sum, row) => sum + Number(row.return_on_risk), 0) / rows.length : 0;
   const avgScore = rows.length ? rows.reduce((sum, row) => sum + Number(row.score), 0) / rows.length : 0;
+  const avgPop = rows.length ? rows.reduce((sum, row) => sum + Number(row.probability_estimate || 0), 0) / rows.length : 0;
+  const higherChanceCount = rows.filter(row => Number(row.probability_estimate || 0) >= .70).length;
   els.metricScanned.textContent = scannedCount;
   els.metricQualified.textContent = rows.length;
   els.qualifiedCount.textContent = rows.length;
   els.metricRor.textContent = rows.length ? formatPercent(avgRor) : "—";
   els.metricScore.textContent = rows.length ? Math.round(avgScore * 100) : "—";
   els.topScore.textContent = rows.length ? Math.round(rows[0].score * 100) : "—";
-  els.resultsSummary.textContent = rows.length ? `${rows.length} candidate${rows.length === 1 ? "" : "s"} passed the current filters.` : "No spreads passed the current filters.";
+  els.resultsSummary.textContent = rows.length
+    ? `${rows.length} candidate${rows.length === 1 ? "" : "s"} passed filters · Avg POP ${formatPercent(avgPop)} · ${higherChanceCount} with POP ≥ 70%.`
+    : "No spreads passed the current filters.";
   els.emptyState.classList.toggle("hidden", rows.length > 0);
   els.tableWrap.classList.toggle("hidden", rows.length === 0);
   els.exportButton.disabled = rows.length === 0;
@@ -303,7 +338,7 @@ function renderTable() {
   els.resultsBody.innerHTML = state.filteredResults.map((row, index) => `
     <tr>
       <td>${index + 1}</td>
-      <td class="symbol-cell"><strong>${row.ticker}</strong><small>${formatMoney(row.price)}</small></td>
+      <td class="symbol-cell"><strong>${row.ticker}</strong><small>${formatSymbolPrice(row.price)}${row.price_source === "synthetic" ? " · est" : ""}</small></td>
       <td><span class="badge ${badgeClass(row.bias_label)}">${row.bias_label}</span><div class="sub-value">${Number(row.bias_score).toFixed(2)}</div></td>
       <td>${row.spread_type}</td>
       <td>${row.expiration}<div class="sub-value">${row.dte} DTE</div></td>
@@ -312,7 +347,7 @@ function renderTable() {
       <td class="positive">${formatMoney(row.credit)}</td>
       <td>${formatMoney(row.max_risk)}</td>
       <td class="positive">${formatPercent(row.return_on_risk)}</td>
-      <td>${formatPercent(row.probability_estimate ?? 0)}</td>
+      <td>${formatPercent(row.probability_estimate)}</td>
       <td>${formatPercent(row.iv_rank)}</td>
       <td><span class="score-pill">${Math.round(row.score * 100)}</span></td>
       <td><button class="row-action" data-index="${state.results.indexOf(row)}">Analyze</button></td>
@@ -358,7 +393,7 @@ function renderAlerts() {
   els.alertsList.innerHTML = alerts.map((row, index) => `
     <button class="alert-row" data-index="${state.results.indexOf(row)}" type="button">
       <span class="alert-rank">${index + 1}</span>
-      <span><strong>${row.ticker} · ${row.spread_type}</strong><small>${formatStrike(row.short_strike)} / ${formatStrike(row.long_strike)} · ${formatPercent(row.return_on_risk)} ROR · ${row.dte} DTE</small></span>
+      <span><strong>${row.ticker} · ${row.spread_type}</strong><small>${formatStrike(row.short_strike)} / ${formatStrike(row.long_strike)} · ${formatPercent(row.return_on_risk)} ROR · ${formatPercent(row.probability_estimate)} POP · ${row.dte} DTE</small></span>
       <span class="score-pill">${Math.round(row.score * 100)}</span>
     </button>
   `).join("");
@@ -366,7 +401,7 @@ function renderAlerts() {
 }
 
 function createPayoffSvg(row) {
-  const width = 470, height = 240, pad = 38;
+  const width = 560, height = 280, pad = 44;
   const spreadWidth = Number(row.width);
   const minPrice = Math.min(row.short_strike, row.long_strike) - spreadWidth * 2.2;
   const maxPrice = Math.max(row.short_strike, row.long_strike) + spreadWidth * 2.2;
@@ -392,17 +427,50 @@ function createPayoffSvg(row) {
   const zeroY = pad + maxProfit / (maxProfit + maxLoss) * (height - pad * 2);
   const shortX = pad + (row.short_strike - minPrice) / (maxPrice - minPrice) * (width - pad * 2);
   const longX = pad + (row.long_strike - minPrice) / (maxPrice - minPrice) * (width - pad * 2);
+  const centerPrice = (row.short_strike + row.long_strike) / 2;
+  const spotX = pad + (Number(row.price) - minPrice) / (maxPrice - minPrice) * (width - pad * 2);
+  const centerX = pad + (centerPrice - minPrice) / (maxPrice - minPrice) * (width - pad * 2);
+  const xLeft = Math.min(shortX, longX);
+  const xRight = Math.max(shortX, longX);
+  const chartBottom = height - pad;
+  const chartTop = pad;
+  const maxProfitY = pad + (maxProfit - maxProfit) / (maxProfit + maxLoss) * (height - pad * 2);
+  const pointsLine = points.join(" ");
   return `
     <svg class="payoff-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Expiration payoff diagram">
+      <polygon points="${pad},${chartBottom} ${xLeft},${chartBottom} ${xLeft},${maxProfitY} ${xRight},${maxProfitY} ${xRight},${chartBottom} ${width-pad},${chartBottom}" fill="rgba(85,214,169,.12)" />
+      <polygon points="${pad},${chartBottom} ${xLeft},${chartBottom} ${xLeft},${zeroY} ${pad},${zeroY}" fill="rgba(255,123,131,.12)" />
+      <polygon points="${xRight},${zeroY} ${xRight},${chartBottom} ${width-pad},${chartBottom} ${width-pad},${zeroY}" fill="rgba(255,123,131,.12)" />
       <line x1="${pad}" y1="${zeroY}" x2="${width-pad}" y2="${zeroY}" stroke="rgba(154,169,186,.45)" stroke-dasharray="5 5" />
-      <line x1="${shortX}" y1="${pad}" x2="${shortX}" y2="${height-pad}" stroke="rgba(212,181,106,.30)" />
-      <line x1="${longX}" y1="${pad}" x2="${longX}" y2="${height-pad}" stroke="rgba(212,181,106,.18)" />
-      <polyline points="${points.join(" ")}" fill="none" stroke="#d4b56a" stroke-width="3" stroke-linejoin="round" />
-      <text x="${pad}" y="18" fill="#55d6a9" font-size="10">Max profit ${formatMoney(maxProfit)}</text>
-      <text x="${width-pad}" y="${height-8}" fill="#ff7b83" font-size="10" text-anchor="end">Max loss ${formatMoney(maxLoss)}</text>
-      <text x="${shortX}" y="${height-14}" fill="#9aa9ba" font-size="9" text-anchor="middle">Short ${formatStrike(row.short_strike)}</text>
-      <text x="${longX}" y="${height-2}" fill="#9aa9ba" font-size="9" text-anchor="middle">Long ${formatStrike(row.long_strike)}</text>
+      <line x1="${shortX}" y1="${chartTop}" x2="${shortX}" y2="${chartBottom}" stroke="rgba(212,181,106,.32)" stroke-dasharray="3 3" />
+      <line x1="${longX}" y1="${chartTop}" x2="${longX}" y2="${chartBottom}" stroke="rgba(212,181,106,.22)" stroke-dasharray="3 3" />
+      <line x1="${spotX}" y1="${chartTop-8}" x2="${spotX}" y2="${chartBottom}" stroke="rgba(108,168,255,.5)" stroke-dasharray="4 4" />
+      <polyline points="${pointsLine}" fill="none" stroke="#63d4ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />
+      <circle cx="${centerX}" cy="${maxProfitY}" r="4" fill="#55d6a9" />
+      <text x="${pad}" y="${chartTop-12}" fill="#55d6a9" font-size="11">Max profit ${formatMoney(maxProfit)}</text>
+      <text x="${width-pad}" y="${chartBottom+16}" fill="#ff7b83" font-size="11" text-anchor="end">Max loss ${formatMoney(maxLoss)}</text>
+      <text x="${spotX}" y="${chartTop-16}" fill="#6ca8ff" font-size="10" text-anchor="middle">Spot ${formatMoney(Number(row.price))}</text>
+      <text x="${shortX}" y="${chartBottom+14}" fill="#9aa9ba" font-size="10" text-anchor="middle">Short ${formatStrike(row.short_strike)}</text>
+      <text x="${longX}" y="${chartBottom+27}" fill="#9aa9ba" font-size="10" text-anchor="middle">Long ${formatStrike(row.long_strike)}</text>
     </svg>`;
+}
+
+function createSpreadGauges(row) {
+  const pop = Math.round(Number(row.probability_estimate || 0) * 100);
+  const iv = Math.round(Number(row.iv_rank || 0) * 100);
+  const ror = Math.round(Number(row.return_on_risk || 0) * 100);
+  return `
+    <div class="spread-gauges">
+      ${gaugeRow("Estimated POP", pop)}
+      ${gaugeRow("IV Rank", iv)}
+      ${gaugeRow("Return on Risk", ror)}
+    </div>
+  `;
+}
+
+function gaugeRow(label, value) {
+  const clamped = Math.max(0, Math.min(100, Number(value)));
+  return `<div class="spread-gauge-row"><span>${label}</span><div class="spread-gauge-track"><div class="spread-gauge-fill" style="width:${clamped}%"></div></div><strong>${clamped}%</strong></div>`;
 }
 
 function openDetail(index) {
@@ -428,6 +496,7 @@ function openDetail(index) {
       ${detailStat("Liquidity", `${row.liquidity} · ${row.open_interest.toLocaleString()} OI`)}
     </div>
     <div class="payoff-card"><h3>Expiration payoff profile</h3>${createPayoffSvg(row)}</div>
+    <div class="payoff-card"><h3>Setup quality gauges</h3>${createSpreadGauges(row)}</div>
     <div class="analysis-notes"><strong>Research interpretation:</strong> This candidate is ranked from return on risk, directional alignment, IV rank, and liquidity. The estimate does not account for commissions, assignment risk, volatility changes after entry, or intraday execution slippage.</div>
     <div class="drawer-actions">
       <button class="primary-button" id="saveToJournal" type="button">Save to trade journal</button>
@@ -496,7 +565,7 @@ function openJournal() {
 
 function exportCsv() {
   if (!state.filteredResults.length) return;
-  const headers = ["ticker","bias_label","spread_type","expiration","dte","short_strike","long_strike","credit","max_risk","return_on_risk","iv_rank","open_interest","score"];
+  const headers = ["ticker","bias_label","spread_type","expiration","dte","short_strike","long_strike","credit","max_risk","return_on_risk","probability_estimate","iv_rank","open_interest","score"];
   const rows = state.filteredResults.map(row => headers.map(key => JSON.stringify(row[key] ?? "")).join(","));
   const blob = new Blob([[headers.join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -510,30 +579,74 @@ function exportCsv() {
 function resetForm() {
   els.watchlist.value = DEFAULTS.watchlist;
   els.strategy.value = DEFAULTS.strategy;
-  els.dteRange.value = DEFAULTS.dteRange;
+  els.dteMin.value = DEFAULTS.dteMin;
+  els.dteMax.value = DEFAULTS.dteMax;
   els.ivRank.value = DEFAULTS.ivRank;
   els.minRor.value = DEFAULTS.minRor;
+  els.minPop.value = DEFAULTS.minPop;
   els.rorOutput.value = `${DEFAULTS.minRor}%`;
+  els.minPopOutput.value = `${DEFAULTS.minPop}%`;
   els.minOi.value = DEFAULTS.minOi;
   els.maxBidAsk.value = DEFAULTS.maxBidAsk;
   els.monthlyChainOnly.checked = DEFAULTS.monthlyChainOnly;
   els.avoidEarnings.checked = true;
-  els.directionalConfirmation.checked = false;
+  els.directionalConfirmation.checked = true;
+  els.presetProfile.value = "balanced";
+  els.symbolUniverse.value = "current";
   els.ivRankOutput.value = `${DEFAULTS.ivRank}%`;
   els.monthlyChainOnly.checked = DEFAULTS.monthlyChainOnly;
   els.rorOutput.value = `${DEFAULTS.minRor}%`;
 }
 
+function applyPreset() {
+  const preset = PRESETS[els.presetProfile.value];
+  if (!preset) return;
+  els.ivRank.value = preset.ivRank;
+  els.minRor.value = preset.minRor;
+  els.minPop.value = preset.minPop;
+  els.minOi.value = preset.minOi;
+  els.maxBidAsk.value = preset.maxBidAsk.toFixed(2);
+  els.avoidEarnings.checked = preset.avoidEarnings;
+  els.directionalConfirmation.checked = preset.directionalConfirmation;
+  els.ivRankOutput.value = `${preset.ivRank}%`;
+  els.rorOutput.value = `${preset.minRor}%`;
+  els.minPopOutput.value = `${preset.minPop}%`;
+}
+
+function applyUniverse() {
+  const key = els.symbolUniverse.value;
+  if (key === "current") return;
+  const symbols = UNIVERSES[key];
+  if (!symbols) return;
+  els.watchlist.value = symbols;
+  els.symbolCount.textContent = parseTickers(symbols).length;
+}
+
+function initMobileTabs() {
+  const tabs = [...document.querySelectorAll(".mobile-tab")];
+  if (!tabs.length) return;
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      const section = document.getElementById(tab.dataset.target);
+      if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+}
+
 els.scannerForm.addEventListener("submit", runScanner);
 els.ivRank.addEventListener("input", () => { els.ivRankOutput.value = `${els.ivRank.value}%`; });
 els.minRor.addEventListener("input", () => { els.rorOutput.value = `${els.minRor.value}%`; });
-els.minProbOtm.addEventListener("input", () => { els.probOtmOutput.value = `${els.minProbOtm.value}%`; });
+els.minPop.addEventListener("input", () => { els.minPopOutput.value = `${els.minPop.value}%`; });
 els.watchlist.addEventListener("input", () => { els.symbolCount.textContent = parseTickers(els.watchlist.value).length; });
 els.resultSearch.addEventListener("input", applySearchAndSort);
 els.sortResults.addEventListener("change", applySearchAndSort);
 els.alertThreshold.addEventListener("input", renderAlerts);
 els.exportButton.addEventListener("click", exportCsv);
 els.resetButton.addEventListener("click", resetForm);
+els.applyPresetButton.addEventListener("click", applyPreset);
+els.applyUniverseButton.addEventListener("click", applyUniverse);
 els.closeDrawer.addEventListener("click", closeDetail);
 els.drawerBackdrop.addEventListener("click", closeDetail);
 els.journalNavButton.addEventListener("click", openJournal);
@@ -558,3 +671,4 @@ document.querySelectorAll("th[data-sort]").forEach(th => {
 
 renderJournalCount();
 els.symbolCount.textContent = parseTickers(els.watchlist.value).length;
+initMobileTabs();
