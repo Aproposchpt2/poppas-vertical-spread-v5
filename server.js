@@ -182,7 +182,8 @@ async function scanSymbol(symbol, cfg) {
 
     const ror = spread.returnOnRisk;
     const cushion = Math.abs(price - spread.shortStrike) / Math.max(price, 1);
-    const probability = Math.min(0.86, Math.max(0.51, 0.56 + cushion * 1.7));
+    const probability = Math.min(0.97, Math.max(0.51, 0.56 + cushion * 1.7));
+    if (probability < cfg.minProbOtm) continue;
     const score = Math.min(1, Math.max(0,
       0.42 * Math.min(ror / 0.55, 1) +
       0.24 * Math.abs(bias.score) +
@@ -282,6 +283,7 @@ const server = http.createServer(async (req, res) => {
         monthlyOnly: input.monthly_chain_only === true,
         requireDirectional: input.require_directional === true,
         avoidEarnings: input.avoid_earnings !== false,
+        minProbOtm: Math.max(0, Math.min(1, input.min_prob_otm ?? 0.80)),
       };
 
       const CONCURRENCY = 3;

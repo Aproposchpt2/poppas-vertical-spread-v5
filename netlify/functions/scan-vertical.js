@@ -54,6 +54,7 @@ exports.handler = async (event) => {
     // Render uses percentage (0-2), not dollars — clamp to valid range
     max_bid_ask_pct: Math.min(2.0, Math.max(0, body.max_bid_ask_pct ?? 1.0)),
     avoid_earnings: body.avoid_earnings !== false,
+    min_prob_otm: body.min_prob_otm ?? 0.80,
   };
 
   try {

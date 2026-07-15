@@ -29,6 +29,7 @@ function getSortVal(row, col) {
     case "credit":   return row.credit ?? 0;
     case "maxrisk":  return row.max_risk ?? 0;
     case "ror":      return row.return_on_risk ?? 0;
+    case "probotm":  return row.probability_estimate ?? 0;
     case "ivrank":   return row.iv_rank ?? 0;
     case "score":    return row.score ?? 0;
     default:         return 0;
@@ -37,6 +38,7 @@ function getSortVal(row, col) {
 
 const els = Object.fromEntries([
   "scannerForm", "watchlist", "strategy", "dteRange", "ivRank", "ivRankOutput", "minRor", "rorOutput",
+  "minProbOtm", "probOtmOutput",
   "minOi", "maxBidAsk", "monthlyChainOnly", "avoidEarnings", "directionalConfirmation", "runButton", "resetButton", "scannerStatus",
   "symbolCount", "qualifiedCount", "topScore", "metricScanned", "metricQualified", "metricRor", "metricScore",
   "resultsSummary", "emptyState", "tableWrap", "resultsBody", "resultSearch", "sortResults", "exportButton",
@@ -154,6 +156,7 @@ function buildDemoResults(tickers, config) {
     if (row.bid_ask_pct > config.maxBidAsk) return false;
     if (config.avoidEarnings && row.earnings_days <= 7) return false;
     if (config.directionalConfirmation && config.strategy === "auto" && Math.abs(row.bias_score) < .08) return false;
+    if ((row.probability_estimate ?? 0) * 100 < config.minProbOtm) return false;
     return true;
   }).sort((a, b) => b.score - a.score).map((row, index) => ({ ...row, rank: index + 1 }));
 }
@@ -170,6 +173,7 @@ function getConfig() {
     monthlyChainOnly: els.monthlyChainOnly.checked,
     avoidEarnings: els.avoidEarnings.checked,
     directionalConfirmation: els.directionalConfirmation.checked,
+    minProbOtm: Number(els.minProbOtm.value),
   };
 }
 
@@ -193,6 +197,7 @@ async function fetchLiveResults(config) {
         monthly_chain_only: config.monthlyChainOnly,
         require_directional: config.directionalConfirmation,
         avoid_earnings: config.avoidEarnings,
+        min_prob_otm: config.minProbOtm / 100,
       }),
     });
     if (!response.ok) throw new Error(`API ${response.status}`);
@@ -307,6 +312,7 @@ function renderTable() {
       <td class="positive">${formatMoney(row.credit)}</td>
       <td>${formatMoney(row.max_risk)}</td>
       <td class="positive">${formatPercent(row.return_on_risk)}</td>
+      <td>${formatPercent(row.probability_estimate ?? 0)}</td>
       <td>${formatPercent(row.iv_rank)}</td>
       <td><span class="score-pill">${Math.round(row.score * 100)}</span></td>
       <td><button class="row-action" data-index="${state.results.indexOf(row)}">Analyze</button></td>
@@ -521,6 +527,7 @@ function resetForm() {
 els.scannerForm.addEventListener("submit", runScanner);
 els.ivRank.addEventListener("input", () => { els.ivRankOutput.value = `${els.ivRank.value}%`; });
 els.minRor.addEventListener("input", () => { els.rorOutput.value = `${els.minRor.value}%`; });
+els.minProbOtm.addEventListener("input", () => { els.probOtmOutput.value = `${els.minProbOtm.value}%`; });
 els.watchlist.addEventListener("input", () => { els.symbolCount.textContent = parseTickers(els.watchlist.value).length; });
 els.resultSearch.addEventListener("input", applySearchAndSort);
 els.sortResults.addEventListener("change", applySearchAndSort);

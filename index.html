@@ -109,6 +109,12 @@
               </label>
 
               <label class="field">
+                <span>Anchor Strike Prob OTM</span>
+                <output id="probOtmOutput" for="minProbOtm">80%</output>
+                <input id="minProbOtm" type="range" min="80" max="97" value="80" step="1" />
+              </label>
+
+              <label class="field">
                 <span>Minimum open interest</span>
                 <input id="minOi" type="number" min="0" step="50" value="100" />
               </label>
@@ -203,6 +209,7 @@
                     <th data-sort="credit">Credit</th>
                     <th data-sort="maxrisk">Max risk</th>
                     <th data-sort="ror">ROR</th>
+                    <th data-sort="probotm">Prob OTM</th>
                     <th data-sort="ivrank">IV rank</th>
                     <th data-sort="score">Score</th>
                     <th></th>
