@@ -52,11 +52,19 @@ exports.handler = async (event) => {
 
     if (!run) return json({ available: false, source: 'schwab' });
 
-    const rows = await get(`scan_candidates?select=symbol&scan_run_id=eq.${encodeURIComponent(run.id)}&limit=5000`);
+    const rows = await get(
+      `scan_candidates?select=symbol,short_put,long_put,short_call,long_call&scan_run_id=eq.${encodeURIComponent(run.id)}&limit=5000`
+    );
     const candidates = Array.isArray(rows) ? rows : [];
     const uniqueCandidateSymbols = new Set(
       candidates.map((row) => String(row.symbol || '').trim().toUpperCase()).filter(Boolean)
     ).size;
+
+    const verticalSpreadOpportunities = candidates.reduce((count, row) => {
+      const hasPutSpread = row.short_put != null && row.long_put != null;
+      const hasCallSpread = row.short_call != null && row.long_call != null;
+      return count + (hasPutSpread ? 1 : 0) + (hasCallSpread ? 1 : 0);
+    }, 0);
 
     const symbolsScanned = firstFiniteNumber(
       run.symbols_scanned,
@@ -72,7 +80,7 @@ exports.handler = async (event) => {
       available: true,
       source: 'schwab',
       completed_at: run.completed_at || run.started_at || null,
-      candidates: candidates.length,
+      vertical_spread_opportunities: verticalSpreadOpportunities,
       symbols_scanned: symbolsScanned,
       scan_run_id: run.id,
     });
