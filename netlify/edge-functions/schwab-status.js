@@ -41,12 +41,12 @@ export default async (request, context) => {
       const timestamp = formatTimestamp(data.completed_at);
       if (!timestamp) return;
 
-      const candidates = Number(data.candidates || 0).toLocaleString('en-US');
+      const opportunities = Number(data.vertical_spread_opportunities || 0).toLocaleString('en-US');
       const symbols = Number(data.symbols_scanned || 0).toLocaleString('en-US');
 
       target.innerHTML =
         '<strong>⬤ Live scan: ' + timestamp + '</strong><br>' +
-        'Loaded ' + candidates + ' Iron Condor candidates from ' + symbols +
+        'Loaded ' + opportunities + ' Vertical Spread Opportunities from ' + symbols +
         ' symbols via Schwab live data.';
     })
     .catch(() => {
