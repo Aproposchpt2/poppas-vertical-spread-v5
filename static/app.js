@@ -8,6 +8,11 @@ const state = {
 
 let sortCol = "", sortDir = 1;
 
+function formatPacific(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short" });
+}
+
 function formatNED(row) {
   if (row.earningsDate && row.earningsDate !== "—") return row.earningsDate;
   if (row.earnings_date && row.earnings_date !== "—") return row.earnings_date;
@@ -39,7 +44,7 @@ function getSortVal(row, col) {
 const els = Object.fromEntries([
   "scannerForm", "watchlist", "strategy", "dteMin", "dteMax", "ivRank", "ivRankOutput", "minRor", "rorOutput", "minPop", "minPopOutput",
   "minOi", "maxBidAsk", "monthlyChainOnly", "avoidEarnings", "directionalConfirmation", "runButton", "resetButton", "scannerStatus",
-  "symbolCount", "qualifiedCount", "topScore", "metricScanned", "metricQualified", "metricRor", "metricScore",
+  "symbolCount", "qualifiedCount", "topScore", "lastScanTime", "metricScanned", "metricQualified", "metricRor", "metricScore",
   "resultsSummary", "emptyState", "tableWrap", "resultsBody", "resultSearch", "sortResults", "exportButton",
   "biasChart", "scoreChart", "alertThreshold", "alertsList", "dataModeLabel", "detailDrawer", "drawerBackdrop",
   "closeDrawer", "drawerTitle", "drawerContent", "journalNavButton", "journalCount", "journalDialog", "journalEntries",
@@ -232,6 +237,7 @@ async function fetchLiveResults(config) {
     if (payload.error) throw new Error(payload.error);
     if (!Array.isArray(payload.results)) throw new Error("Invalid response");
     state.mode = payload.mode || "live";
+    state.scanRun = payload.scan_run || null;
     return payload.results;
   } finally {
     clearTimeout(timeout);
@@ -258,6 +264,7 @@ async function runScanner(event) {
     state.filteredResults = [...state.results];
     els.dataModeLabel.textContent = modeLabel(state.mode);
     els.scannerStatus.textContent = "Complete";
+    els.lastScanTime.textContent = formatPacific(state.scanRun && state.scanRun.completed_at);
     renderAll(config.watchlist.length);
   } catch (error) {
     state.results = [];
