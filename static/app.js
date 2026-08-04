@@ -13,14 +13,24 @@ function formatPacific(iso) {
   return new Date(iso).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short" });
 }
 
+// NED = "earnings within this candidate's DTE window?" — a definite Yes/No answer,
+// not a raw date. "Yes" means Nasdaq confirmed the date; "Yes*" means no confirmed
+// date exists but a +91-day projection off the last known report lands in-window
+// (see earnings_estimated in scan-build-db.js) — flagged distinctly so an estimate
+// is never mistaken for a confirmed date.
 function formatNED(row) {
-  if (row.earningsDate && row.earningsDate !== "—") return row.earningsDate;
-  if (row.earnings_date && row.earnings_date !== "—") return row.earnings_date;
-  if (row.earnings_days && row.earnings_days < 999) {
-    const d = new Date(Date.now() + row.earnings_days * 86400000);
-    return String(d.getMonth() + 1).padStart(2, "0") + "/" + String(d.getDate()).padStart(2, "0");
-  }
-  return "—";
+  if (row.earnings) return "Yes";
+  if (row.earnings_estimated) return "Yes*";
+  // Demo/mock mode has no confirmed/estimated split — fall back to its earnings_days signal.
+  if (row.earnings_days != null && row.earnings_days < 999) return "Yes";
+  return "No";
+}
+
+function nedSortRank(row) {
+  if (row.earnings) return 2;
+  if (row.earnings_estimated) return 1;
+  if (row.earnings_days != null && row.earnings_days < 999) return 1;
+  return 0;
 }
 
 function getSortVal(row, col) {
@@ -30,7 +40,7 @@ function getSortVal(row, col) {
     case "bias":     return row.bias_score ?? 0;
     case "strategy": return row.spread_type ?? "";
     case "dte":      return row.dte ?? 0;
-    case "ned":      return formatNED(row);
+    case "ned":      return nedSortRank(row);
     case "credit":   return row.credit ?? 0;
     case "maxrisk":  return row.max_risk ?? 0;
     case "ror":      return row.return_on_risk ?? 0;
