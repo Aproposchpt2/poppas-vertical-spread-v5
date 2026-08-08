@@ -38,13 +38,13 @@ async function sbGet(path) {
   return res.json();
 }
 
-// Get latest completed scan run
+// Get latest completed scan run. No fallback to incomplete/failed runs —
+// an empty result set is the intended signal that the shared Schwab scan
+// hasn't produced a usable run yet, so it's obvious when to check the
+// pipeline instead of silently serving partial data from an unfinished scan.
 async function latestRun() {
   const rows = await sbGet('scan_runs?select=id,started_at,completed_at,status,strategy&status=eq.completed&order=completed_at.desc&limit=1');
-  if (Array.isArray(rows) && rows[0]) return rows[0];
-  // Fallback: any run
-  const any = await sbGet('scan_runs?select=id,started_at,completed_at,status,strategy&order=started_at.desc&limit=1');
-  return Array.isArray(any) ? any[0] : null;
+  return Array.isArray(rows) && rows[0] ? rows[0] : null;
 }
 
 // ── Map Supabase condor row → vertical spread candidate ───────────────────────
